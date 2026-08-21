@@ -11,32 +11,37 @@ coverage of the USA, India (including Chennai specifically), and rest-of-world n
 ## How it works
 
 ```
-GitHub Actions (weekly cron, Mondays 06:00 UTC)
-        │
-        ▼
-scraper/main.py
-  ├─ sources.py     → pulls articles from RSS feeds + Hacker News (all free, no key)
-  ├─ extractor.py   → phase 1: sends article batches to Gemini's free API,
-  │                    gets back company/idea/industry/location/funding/investors
-  ├─ enrich.py      → phase 2: finds each startup's own website, pulls founder
-  │                    LinkedIn / contact email / hiring signal via regex (free,
-  │                    no LLM cost), then one batched Gemini call to fill in
-  │                    founder name / year founded / unique moat
+GitHub Actions (weekly cron, Mondays 06:00 UTC)          GitHub Actions (daily cron, 12:00 UTC)
+        │                                                        │
+        ▼                                                        ▼
+scraper/main.py                                          scraper/news_job.py
+  ├─ sources.py     → RSS feeds + Hacker News (free)        (reuses sources.py, no LLM call --
+  ├─ extractor.py   → phase 1: Gemini extracts               just raw headlines, cheap enough
+  │                    company/idea/industry/location/       to run daily)
+  │                    funding/investors                           │
+  ├─ enrich.py      → phase 2: finds each startup's own            ▼
+  │                    website, pulls founder LinkedIn /    Supabase "news_feed" table
+  │                    contact email / hiring signal via    (upsert by link, pruned after 14 days)
+  │                    regex (free), then one batched
+  │                    Gemini call for founder name /
+  │                    year founded / unique moat
         │
         ▼
 Supabase "startups" table (upsert, deduped by company_name)
         │
         ▼
-frontend/index.html  →  fetches top 100 (by disclosed funding) directly from
-                         Supabase client-side, with region/industry/stage/hiring filters
+frontend/index.html  →  fetches top 100 (by disclosed funding) + the news sidebar,
+                         both directly from Supabase client-side
         │
         ▼
 you upload this ONE file, once, to terralytixai.com/startups/index.html
 ```
 
 The key thing: **you only upload the frontend file once.** It queries Supabase live on
-every page load, so as the weekly job updates rows, the page just shows them — no re-upload
-needed.
+every page load, so as the weekly and daily jobs update their tables, the page just shows
+the new data — no re-upload needed. The main startup table refreshes weekly (it does the
+expensive Gemini extraction + website enrichment); the news sidebar refreshes daily (it's
+just headlines, no LLM involved, so daily is cheap).
 
 ## Setup steps
 
@@ -69,9 +74,10 @@ needed.
    - `SUPABASE_SERVICE_KEY`
 
 That's it — `.github/workflows/weekly.yml` will now run automatically every Monday at
-06:00 UTC. You can also trigger it manually anytime from the repo's "Actions" tab →
-"Weekly Startup Scan" → "Run workflow", which is the fastest way to test it end-to-end
-the first time.
+06:00 UTC, and `.github/workflows/daily_news.yml` (same secrets, no `GEMINI_API_KEY`
+needed) runs every day at 12:00 UTC to refresh the news sidebar. You can also trigger
+either one manually anytime from the repo's "Actions" tab → pick the workflow → "Run
+workflow", which is the fastest way to test them end-to-end the first time.
 
 ### 4. Publish the frontend
 
@@ -80,8 +86,10 @@ the first time.
    const SUPABASE_URL = "https://xxxxx.supabase.co";
    const SUPABASE_ANON_KEY = "eyJ...";      // the anon public key, NOT service_role
    ```
-2. Upload that one file via FTP/cPanel to wherever `www.terralytixai.com/startups`
-   should point (e.g. as `startups/index.html`).
+2. Upload `frontend/index.html` **and** the `frontend/images/` folder together via FTP/cPanel
+   to wherever `www.terralytixai.com/startups` should point (e.g. `startups/index.html` and
+   `startups/images/...`) — the logo files are referenced with a relative `images/` path, so
+   they need to keep sitting next to the HTML file.
 3. Done — visit the page any time and it'll show whatever is currently in the table.
 
 ## What gets extracted, and how reliable each field is
@@ -96,9 +104,20 @@ the first time.
 | Founder LinkedIn | Regex scan of the company's own website | **Often null** — many sites don't link a personal LinkedIn |
 | Contact email | Regex scan for `mailto:`/email patterns on the company's own website | **Often null** — most startups don't publish one |
 | Hiring status | Detects a `/careers` or `/jobs` page, or "we're hiring" language | Best-effort; "Unknown" is common, not a bug |
+| Signal (★) | Rule-based score (1-5) computed in `compute_signal_score()` from funding stage + disclosed amount + whether investors were named | **Not a valuation or a prediction** — see below |
 
 This is news-driven and website-driven, not a Crunchbase/LinkedIn-grade database — treat it
 as a discovery feed, and spot-check anything before treating it as fact.
+
+### About the "Signal" star rating
+
+There's no free source of real startup valuations, so the Signal column is a transparent,
+rule-based heuristic — not a valuation, and not a claim about which startups will succeed.
+It's computed once per row in `scraper/extractor.py::compute_signal_score()` from three things
+we actually have: funding stage (later stage scores higher), disclosed amount (larger rounds add
+a point), and whether any investor was named (a small bump for early/unstated-stage rows). A
+startup with an unstated funding stage gets the lowest, most conservative score — that reflects
+missing information, not a negative judgment on the company.
 
 ## Notes and honest limitations
 
@@ -119,12 +138,23 @@ as a discovery feed, and spot-check anything before treating it as fact.
   and can't run this job. The separate Anthropic API is metered pay-per-token — an option
   worth considering later for extraction quality, but not a free-tier fit like Gemini/Groq.
 
+## The frontend: theme + news sidebar
+
+- **Dark / light toggle**: the sun/moon button in the top bar switches themes instantly;
+  the choice is remembered per-visitor via `localStorage` (falls back to dark on first visit
+  or if storage is blocked). The logo swaps automatically too: `frontend/images/StartupRadar_logo_white_noBG.png`
+  in dark mode, `frontend/images/StartupRadar_logo_blue_noBG.png` in light mode.
+- **News sidebar**: reads the `news_feed` table (populated daily, see above) and shows the
+  latest ~20 headlines with source + relative time, independent of the weekly startup table.
+
 ## Files
 
 - `supabase_schema.sql` — run once in Supabase (upgrade-safe)
 - `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world)
 - `scraper/extractor.py` — phase 1: Gemini extraction + region/funding-amount parsing
 - `scraper/enrich.py` — phase 2: company-website discovery + regex parsing + Gemini refine pass
-- `scraper/main.py` — orchestrates the run and upserts into Supabase
-- `.github/workflows/weekly.yml` — the free weekly scheduler (GitHub Actions)
+- `scraper/main.py` — orchestrates the weekly run and upserts into `startups`
+- `scraper/news_job.py` — orchestrates the daily headline refresh into `news_feed` (no LLM)
+- `.github/workflows/weekly.yml` — free weekly scheduler for the startup table
+- `.github/workflows/daily_news.yml` — free daily scheduler for the news sidebar
 - `frontend/index.html` — the page you upload to your site

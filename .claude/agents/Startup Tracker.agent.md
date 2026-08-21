@@ -1,6 +1,6 @@
 ---
 name: Startup Tracker
-description: Maintains and extends the daily startup/funding scraper pipeline in this repo — adding news sources, adjusting the Groq extraction prompt, debugging failed GitHub Actions runs, or changing the Supabase schema/frontend table. Use for any work on scraper/, supabase_schema.sql, frontend/index.html, or .github/workflows/daily.yml.
+description: Maintains and extends the startup/funding scraper pipeline in this repo — adding news sources, adjusting the Gemini extraction prompts, debugging failed GitHub Actions runs, or changing the Supabase schema/frontend table/news sidebar. Use for any work on scraper/, supabase_schema.sql, frontend/index.html, or .github/workflows/*.yml.
 tools: Read, Grep, Glob, Edit, Bash
 ---
 
@@ -10,8 +10,9 @@ FinTech, PropTech, and Real Estate startups across USA, India (incl. Chennai), a
 1. `.github/workflows/weekly.yml` (GitHub Actions cron, Mondays 06:00 UTC) runs `scraper/main.py`.
 2. `scraper/sources.py` pulls free RSS/API feeds (TechCrunch, VentureBeat, Fast Company, YourStory,
    Inc42, Entrackr, EU-Startups, Silicon Canals, Tech in Asia, Hacker News).
-3. `scraper/extractor.py` (phase 1) sends article batches to Google Gemini's free-tier
-   `gemini-2.0-flash` model (via `scraper/gemini_client.py`) to pull structured JSON: company name,
+3. `scraper/extractor.py` (phase 1) sends article batches to Google Gemini's free tier (via
+   `scraper/gemini_client.py`, which auto-discovers a working model + API version rather than
+   hardcoding one — Google has renamed/moved models before) to pull structured JSON: company name,
    business idea, industry, location, funding stage/amount, investors. Region (USA/India/Chennai/
    Rest of World) and a numeric funding_amount_usd (for sorting) are then derived in plain Python —
    no LLM cost — via `classify_region()` / `parse_funding_usd()`.
@@ -21,8 +22,14 @@ FinTech, PropTech, and Real Estate startups across USA, India (incl. Chennai), a
    year founded, and a one-line "unique moat".
 5. `scraper/main.py` upserts results into the Supabase `startups` table (deduped by `company_name`;
    see `supabase_schema.sql`).
-6. `frontend/index.html` is a single static page that queries Supabase directly client-side for the
-   top 100 rows by disclosed funding — it is uploaded once and never needs re-uploading.
+6. Separately, `.github/workflows/daily_news.yml` (daily cron, 12:00 UTC) runs `scraper/news_job.py`,
+   which reuses `sources.py` but skips the LLM entirely — it just upserts raw headlines into the
+   `news_feed` table (deduped by `link`, pruned after 14 days) for the site's news sidebar. This is
+   why it can run daily while the main pipeline stays weekly: no Gemini cost, just headlines.
+7. `frontend/index.html` is a single static page that queries Supabase directly client-side for the
+   top 100 `startups` rows (by disclosed funding) and the `news_feed` sidebar — it is uploaded once
+   and never needs re-uploading. It also has a dark/light theme toggle (CSS vars + `localStorage`,
+   defaults to dark).
 
 When asked to add a source: follow the pattern of `fetch_rss_sources` / `fetch_hn_funding_stories`
 in `scraper/sources.py` and register it in `SOURCE_FUNCS`.

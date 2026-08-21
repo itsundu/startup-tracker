@@ -111,3 +111,36 @@ def parse_funding_usd(text):
     num = float(m.group(1).replace(",", ""))
     mult = {"k": 1e3, "m": 1e6, "b": 1e9}[m.group(2).lower()]
     return int(num * mult)
+
+
+def compute_signal_score(funding_stage, funding_amount_usd, investors):
+    """A 1-5 heuristic 'how much momentum does this round signal' score, built only from
+    funding stage / disclosed amount / whether investors were named -- NOT a valuation, and
+    not a prediction of future success. It exists so the table can be sorted/skimmed by
+    strength of signal without pretending to know something no public source stated.
+    """
+    stage = (funding_stage or "").lower()
+
+    if "pre-seed" in stage or "preseed" in stage or "pre seed" in stage:
+        score = 1
+    elif "seed" in stage:
+        score = 2
+    elif "series a" in stage:
+        score = 3
+    elif "series b" in stage:
+        score = 4
+    elif any(s in stage for s in ("series c", "series d", "series e", "series f", "growth", "late stage")):
+        score = 5
+    else:
+        score = 1  # stage unstated -- most conservative, since we genuinely don't know
+
+    if funding_amount_usd:
+        if funding_amount_usd >= 100_000_000 and score < 5:
+            score += 1
+        elif funding_amount_usd >= 20_000_000 and score < 4:
+            score += 1
+
+    if investors and score < 3:
+        score += 1  # a named backer nudges an early/unlabeled round up slightly
+
+    return max(1, min(5, score))

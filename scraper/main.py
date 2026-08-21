@@ -2,7 +2,7 @@ import os
 import requests
 
 from sources import fetch_all_articles
-from extractor import extract_startups, classify_region, parse_funding_usd
+from extractor import extract_startups, classify_region, parse_funding_usd, compute_signal_score
 from enrich import enrich_all
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -41,6 +41,7 @@ def upsert_startups(records):
             "funding_stage": r.get("funding_stage"),
             "funding_amount": r.get("funding_amount"),
             "funding_amount_usd": r.get("funding_amount_usd"),
+            "signal_score": r.get("signal_score"),
             "investors": r.get("investors"),
             "contact_email": r.get("contact_email"),
             "hiring_status": r.get("hiring_status"),
@@ -92,6 +93,7 @@ def main():
     for r in records:
         r["region"] = classify_region(r.get("location"))
         r["funding_amount_usd"] = parse_funding_usd(r.get("funding_amount"))
+        r["signal_score"] = compute_signal_score(r.get("funding_stage"), r.get("funding_amount_usd"), r.get("investors"))
 
     written = upsert_startups(records)
     print(f"Upserted {written} rows into Supabase.")

@@ -1,0 +1,28 @@
+name: Daily News Refresh
+
+on:
+  schedule:
+    - cron: "0 12 * * *"  # 12:00 UTC every day
+  workflow_dispatch: {}   # lets you trigger it manually from the Actions tab
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Run news job
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python news_job.py

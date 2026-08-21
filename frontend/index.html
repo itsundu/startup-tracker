@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Startup Signal — Terralytix AI</title>
+<title>Startup Radar</title>
+<meta name="description" content="Startup Radar — a global intelligence hub tracking the top 100 AI, Tech, FinTech, PropTech and Real Estate startups, refreshed weekly.">
+<link rel="icon" type="image/png" href="images/StartupRadar_logo_blue_noBG.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -15,8 +17,21 @@
     --ink:       #EDEAE3;
     --ink-dim:   #8B97A8;
     --amber:     #F2A93B;
+    --amber-ink: #1a1204;
     --teal:      #3FB6A8;
+    --shadow:    0 1px 2px rgba(0,0,0,.4);
     --radius:    10px;
+  }
+  html[data-theme="light"]{
+    --bg:        #F6F4EF;
+    --bg-panel:  #FFFFFF;
+    --line:      #E3DFD5;
+    --ink:       #1B2130;
+    --ink-dim:   #6B7280;
+    --amber:     #B4720E;
+    --amber-ink: #FFF7EA;
+    --teal:      #1B8C7D;
+    --shadow:    0 1px 2px rgba(20,20,10,.06);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -25,20 +40,48 @@
     color:var(--ink);
     font-family:'IBM Plex Mono', monospace;
     min-height:100vh;
+    transition:background .15s ease, color .15s ease;
   }
-  .wrap{max-width:1180px;margin:0 auto;padding:32px 20px 64px;}
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 20px 64px;}
 
-  /* Header */
-  header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:22px;}
-  .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;letter-spacing:-0.01em;}
+  /* Top bar */
+  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:8px;}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;letter-spacing:-0.01em;}
   .brand span{color:var(--amber);}
-  .subtitle{color:var(--ink-dim);font-size:13px;margin-top:4px;letter-spacing:.02em;}
+  .brand-logo{height:30px;width:auto;display:none;}
+  html[data-theme="dark"] .brand-logo.logo-dark{display:block;}
+  html[data-theme="light"] .brand-logo.logo-light{display:block;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(63,182,168,.6);animation:pulse 2s infinite;}
   @keyframes pulse{
     0%{box-shadow:0 0 0 0 rgba(63,182,168,.55);}
     70%{box-shadow:0 0 0 8px rgba(63,182,168,0);}
     100%{box-shadow:0 0 0 0 rgba(63,182,168,0);}
+  }
+  .theme-toggle{
+    width:32px;height:32px;border-radius:50%;
+    background:var(--bg-panel);border:1px solid var(--line);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;cursor:pointer;transition:border-color .15s;
+  }
+  .theme-toggle:hover{border-color:var(--amber);}
+
+  /* Hero */
+  .hero{margin:18px 0 28px;max-width:840px;}
+  .hero h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:clamp(24px,3.4vw,36px);
+    line-height:1.2;
+    letter-spacing:-0.01em;
+    margin:0 0 12px;
+  }
+  .hero p{
+    color:var(--ink-dim);
+    font-size:13.5px;
+    line-height:1.75;
+    margin:0;
   }
 
   /* Ticker */
@@ -78,8 +121,12 @@
   .controls input{flex:1;min-width:200px;}
   .controls input:focus, .controls select:focus{border-color:var(--amber);}
 
+  /* Two-column layout: table + news sidebar */
+  .layout{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;}
+  .main-col{min-width:0;}
+
   /* Table */
-  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;overflow-x:auto;background:var(--bg-panel);box-shadow:var(--shadow);}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   thead th{
     text-align:left;
@@ -103,19 +150,45 @@
     color:var(--ink);
   }
   tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:rgba(242,169,59,0.04);}
+  tbody tr:hover{background:rgba(242,169,59,0.06);}
   .company{font-weight:600;font-family:'Space Grotesk',sans-serif;}
   .badge-new{
     display:inline-block;margin-left:8px;font-size:9px;font-family:'Space Grotesk',sans-serif;
-    background:var(--amber);color:#1a1204;padding:1px 6px;border-radius:4px;font-weight:700;
+    background:var(--amber);color:var(--amber-ink);padding:1px 6px;border-radius:4px;font-weight:700;
     letter-spacing:.04em;vertical-align:middle;
   }
   .muted{color:var(--ink-dim);}
   a.src{color:var(--teal);text-decoration:none;}
   a.src:hover{text-decoration:underline;}
+  .signal{font-size:13px;letter-spacing:1px;white-space:nowrap;cursor:help;}
+  .signal-high{color:var(--teal);}
+  .signal-mid{color:var(--amber);}
+  .signal-low{color:var(--ink-dim);}
   .empty, .loading{padding:60px 20px;text-align:center;color:var(--ink-dim);}
 
-  footer{margin-top:26px;font-size:11px;color:var(--ink-dim);text-align:center;}
+  /* News sidebar */
+  .sidebar-card{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--bg-panel);padding:16px;position:sticky;top:20px;
+    box-shadow:var(--shadow);
+  }
+  .sidebar-card h2{
+    font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);
+    margin:0 0 4px;
+  }
+  .sidebar-sub{font-size:11px;color:var(--ink-dim);margin:0 0 14px;}
+  .news-list{display:flex;flex-direction:column;gap:12px;max-height:680px;overflow-y:auto;padding-right:2px;}
+  .news-item{display:block;text-decoration:none;color:inherit;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .news-item:last-child{border-bottom:none;padding-bottom:0;}
+  .news-title{font-size:12.5px;font-weight:500;color:var(--ink);line-height:1.45;margin-bottom:5px;}
+  .news-item:hover .news-title{color:var(--amber);}
+  .news-meta{font-size:10.5px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.03em;}
+
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr;}
+    .sidebar-card{position:static;}
+  }
 
   @media (max-width:700px){
     thead{display:none;}
@@ -129,64 +202,99 @@
 <body>
 <div class="wrap">
 
-  <header>
-    <div>
-      <div class="brand">TERRALYTIX<span>AI</span> · STARTUP SIGNAL</div>
-      <div class="subtitle">Top 100 AI, Tech, FinTech, PropTech &amp; Real Estate startups — USA, India (incl. Chennai) &amp; worldwide. Ranked by disclosed funding, refreshed weekly.</div>
+  <div class="topbar">
+    <div class="brand">
+      <img class="brand-logo logo-dark" src="images/StartupRadar_logo_white_noBG.png" alt="Startup Radar logo">
+      <img class="brand-logo logo-light" src="images/StartupRadar_logo_blue_noBG.png" alt="Startup Radar logo">
+      STARTUP <span>RADAR</span>
     </div>
-    <div class="status"><span class="dot"></span><span id="last-updated">Loading last scan…</span></div>
-  </header>
-
-  <div class="ticker-outer">
-    <div class="ticker-track" id="ticker">
-      <span>Scanning global feeds…</span>
+    <div class="topbar-right">
+      <div class="status"><span class="dot"></span><span id="last-updated">Loading last scan…</span></div>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle dark/light theme">🌙</button>
     </div>
   </div>
 
-  <div class="controls">
-    <input type="text" id="search" placeholder="Search company, idea, investor, location…">
-    <select id="filter-region"><option value="">All regions</option></select>
-    <select id="filter-industry"><option value="">All industries</option></select>
-    <select id="filter-stage"><option value="">All stages</option></select>
-    <select id="filter-hiring"><option value="">Hiring: any</option></select>
-  </div>
+  <div class="layout">
+    <div class="main-col">
 
-  <div class="table-outer">
-    <table id="startup-table">
-      <thead>
-        <tr>
-          <th data-key="company_name">Company</th>
-          <th data-key="region">Region</th>
-          <th data-key="location">Location</th>
-          <th data-key="year_founded">Founded</th>
-          <th data-key="founder_name">Founder</th>
-          <th data-key="industry">Industry</th>
-          <th data-key="business_idea">What they do</th>
-          <th data-key="unique_moat">Moat</th>
-          <th data-key="funding_stage">Stage</th>
-          <th data-key="funding_amount">Amount</th>
-          <th data-key="investors">Investors</th>
-          <th data-key="contact_email">Contact</th>
-          <th data-key="hiring_status">Hiring</th>
-          <th data-key="source_name">Source</th>
-        </tr>
-      </thead>
-      <tbody id="table-body">
-        <tr><td colspan="14" class="loading">Loading startups…</td></tr>
-      </tbody>
-    </table>
-  </div>
+      <div class="hero">
+        <h1>Where Emerging Giants Get Discovered.</h1>
+        <p>Startup Radar is a global intelligence hub spotlighting the Top 100 startups, Tech innovators, FinTech disruptors, PropTech pioneers, and high‑growth real estate ventures across the USA, India and worldwide. Rankings are refreshed weekly and powered by AI disclosed funding, traction signals, and market momentum—giving founders, investors, and operators a clean, data‑driven snapshot of the startups shaping tomorrow.</p>
+      </div>
 
-  <footer>
-    Sourced automatically from public news &amp; startup feeds, with light enrichment from each
-    company's own website. Founder LinkedIn, contact email, and hiring status are often unavailable
-    even on official sites, so those fields are frequently blank. Entries reflect what public sources
-    reported and may be incomplete or unconfirmed. Updated weekly.
-  </footer>
+      <div class="ticker-outer">
+        <div class="ticker-track" id="ticker">
+          <span>Scanning global feeds…</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <input type="text" id="search" placeholder="Search company, idea, investor, location…">
+        <select id="filter-region"><option value="">All regions</option></select>
+        <select id="filter-industry"><option value="">All industries</option></select>
+        <select id="filter-stage"><option value="">All stages</option></select>
+        <select id="filter-hiring"><option value="">Hiring: any</option></select>
+      </div>
+
+      <main class="table-outer">
+        <table id="startup-table">
+          <thead>
+            <tr>
+              <th data-key="company_name">Company</th>
+              <th data-key="region">Region</th>
+              <th data-key="location">Location</th>
+              <th data-key="year_founded">Founded</th>
+              <th data-key="founder_name">Founder</th>
+              <th data-key="industry">Industry</th>
+              <th data-key="business_idea">What they do</th>
+              <th data-key="unique_moat">Moat</th>
+              <th data-key="funding_stage">Stage</th>
+              <th data-key="funding_amount">Amount</th>
+              <th data-key="signal_score">Signal</th>
+              <th data-key="investors">Investors</th>
+              <th data-key="contact_email">Contact</th>
+              <th data-key="hiring_status">Hiring</th>
+              <th data-key="source_name">Source</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="15" class="loading">Loading startups…</td></tr>
+          </tbody>
+        </table>
+      </main>
+
+    </div>
+
+    <aside class="sidebar">
+      <div class="sidebar-card">
+        <h2>Latest AI &amp; Startup News</h2>
+        <p class="sidebar-sub">Refreshed daily</p>
+        <div id="news-list" class="news-list"><div class="loading">Loading news…</div></div>
+      </div>
+    </aside>
+  </div>
 
 </div>
 
 <script>
+  // ---- Theme (dark default, persisted per-visitor) ----
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = document.getElementById("theme-toggle");
+    if(btn) btn.textContent = theme === "light" ? "☀️" : "🌙";
+    try{ localStorage.setItem("startup-radar-theme", theme); }catch(e){}
+  }
+  (function initTheme(){
+    let stored = null;
+    try{ stored = localStorage.getItem("startup-radar-theme"); }catch(e){}
+    const theme = stored || "dark";
+    applyTheme(theme);
+  })();
+  document.getElementById("theme-toggle").addEventListener("click", ()=>{
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+
   // ---- Fill these in with your Supabase project's values ----
   // Project Settings -> API in your Supabase dashboard.
   // The "anon public" key is safe to expose here: it can only READ (see RLS policy in supabase_schema.sql).
@@ -210,6 +318,18 @@
     if(!dateStr) return false;
     const hours = (Date.now() - new Date(dateStr).getTime()) / 36e5;
     return hours <= 24;
+  }
+
+  function timeAgo(dateStr){
+    if(!dateStr) return "";
+    const ms = Date.now() - new Date(dateStr).getTime();
+    if(isNaN(ms)) return "";
+    const mins = Math.floor(ms / 60000);
+    if(mins < 60) return `${Math.max(mins,0)}m ago`;
+    const hours = Math.floor(mins / 60);
+    if(hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   }
 
   function populateFilters(rows){
@@ -253,6 +373,14 @@
     track.innerHTML = build + build; // duplicate for seamless scroll loop
   }
 
+  function renderSignal(score){
+    if(!score) return '<span class="muted">—</span>';
+    const s = Math.max(1, Math.min(5, score));
+    const tier = s >= 4 ? "signal-high" : (s >= 3 ? "signal-mid" : "signal-low");
+    const stars = "★".repeat(s) + "☆".repeat(5 - s);
+    return `<span class="signal ${tier}" title="Signal ${s}/5 — a heuristic from disclosed funding stage/amount/investors, not a verified valuation">${stars}</span>`;
+  }
+
   function escapeHtml(str){
     if(str === null || str === undefined) return "";
     return String(str).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
@@ -290,7 +418,7 @@
 
     const body = document.getElementById("table-body");
     if(rows.length === 0){
-      body.innerHTML = `<tr><td colspan="14" class="empty">No startups match these filters yet.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="15" class="empty">No startups match these filters yet.</td></tr>`;
       return;
     }
 
@@ -306,6 +434,7 @@
         <td data-label="Moat">${escapeHtml(r.unique_moat) || '<span class="muted">—</span>'}</td>
         <td data-label="Stage">${escapeHtml(r.funding_stage) || '<span class="muted">—</span>'}</td>
         <td data-label="Amount">${escapeHtml(r.funding_amount) || '<span class="muted">—</span>'}</td>
+        <td data-label="Signal">${renderSignal(r.signal_score)}</td>
         <td data-label="Investors">${escapeHtml(r.investors) || '<span class="muted">—</span>'}</td>
         <td data-label="Contact">${r.contact_email ? `<a class="src" href="mailto:${escapeHtml(r.contact_email)}">${escapeHtml(r.contact_email)}</a>` : '<span class="muted">—</span>'}</td>
         <td data-label="Hiring">${escapeHtml(r.hiring_status) || '<span class="muted">—</span>'}</td>
@@ -324,7 +453,7 @@
 
     if(error){
       document.getElementById("table-body").innerHTML =
-        `<tr><td colspan="14" class="empty">Couldn't load data. Check the Supabase URL/key in this page's script.</td></tr>`;
+        `<tr><td colspan="15" class="empty">Couldn't load data. Check the Supabase URL/key in this page's script.</td></tr>`;
       console.error(error);
       return;
     }
@@ -338,6 +467,35 @@
     document.getElementById("last-updated").textContent = latest
       ? `Last scan: ${fmtDate(latest)}`
       : "No scans yet";
+  }
+
+  async function loadNews(){
+    const list = document.getElementById("news-list");
+    const { data, error } = await client
+      .from("news_feed")
+      .select("*")
+      .order("published", { ascending: false, nullsFirst: false })
+      .order("fetched_at", { ascending: false })
+      .limit(20);
+
+    if(error){
+      list.innerHTML = `<div class="empty">Couldn't load news.</div>`;
+      console.error(error);
+      return;
+    }
+
+    const items = data || [];
+    if(items.length === 0){
+      list.innerHTML = `<div class="empty">No news yet — first daily refresh pending.</div>`;
+      return;
+    }
+
+    list.innerHTML = items.map(n => `
+      <a class="news-item" href="${n.link}" target="_blank" rel="noopener">
+        <div class="news-title">${escapeHtml(n.title)}</div>
+        <div class="news-meta">${escapeHtml(n.source_name || '')}${n.published ? ' · ' + timeAgo(n.published) : ''}</div>
+      </a>
+    `).join("");
   }
 
   document.getElementById("search").addEventListener("input", renderTable);
@@ -354,6 +512,7 @@
   });
 
   load();
+  loadNews();
 </script>
 </body>
 </html>

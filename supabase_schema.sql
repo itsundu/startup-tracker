@@ -21,6 +21,7 @@ alter table startups add column if not exists unique_moat text;
 alter table startups add column if not exists funding_stage text;
 alter table startups add column if not exists funding_amount text;
 alter table startups add column if not exists funding_amount_usd numeric;
+alter table startups add column if not exists signal_score int;
 alter table startups add column if not exists investors text;
 alter table startups add column if not exists contact_email text;
 alter table startups add column if not exists hiring_status text;
@@ -56,14 +57,35 @@ create table if not exists scan_log (
   startups_found int
 );
 
+-- Latest AI/startup headlines for the site's news sidebar. Populated by a
+-- separate DAILY job (scraper/news_job.py) -- no LLM involved, just raw
+-- headlines from the same free feeds, so it's cheap enough to run daily
+-- even though the main startups table only refreshes weekly.
+create table if not exists news_feed (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  link text not null,
+  source_name text,
+  published text,
+  fetched_at timestamptz default now(),
+  unique (link)
+);
+
+create index if not exists idx_news_feed_published on news_feed (published desc nulls last);
+create index if not exists idx_news_feed_fetched on news_feed (fetched_at desc);
+
 -- Row Level Security: the site (using the public "anon" key) may only READ.
 -- Writing happens only from GitHub Actions using the "service_role" key,
 -- which bypasses RLS entirely -- so no write policy is needed or wanted here.
 alter table startups enable row level security;
 alter table scan_log enable row level security;
+alter table news_feed enable row level security;
 
 drop policy if exists "Public read access" on startups;
 create policy "Public read access" on startups for select using (true);
 
 drop policy if exists "Public read access" on scan_log;
 create policy "Public read access" on scan_log for select using (true);
+
+drop policy if exists "Public read access" on news_feed;
+create policy "Public read access" on news_feed for select using (true);
