@@ -126,15 +126,19 @@ missing information, not a negative judgment on the company.
 This pipeline has broken in production before (Google renaming/retiring Gemini models out
 from under it), so three layers guard against it recurring silently:
 
-1. **Self-healing model selection** (`scraper/gemini_client.py`): rather than a hardcoded
-   model id, it asks Gemini's `ListModels` endpoint what's actually callable, tries both the
-   `v1beta` and `v1` API versions, and — if a 404 response names a replacement model
-   ("...use models/X instead") — switches straight to it. This alone fixes most future
-   renames automatically, with no code change needed.
+1. **Self-healing model selection on both providers** (`scraper/gemini_client.py` and
+   `scraper/groq_client.py`): rather than a hardcoded model id, each asks its provider's
+   model-listing endpoint what's actually callable, and re-discovers if a call 404s.
+   Gemini's client additionally tries both the `v1beta` and `v1` API versions, and — if a
+   404 response names a replacement model ("...use models/X instead") — switches straight
+   to it. This alone fixes most future renames automatically, with no code change needed
+   (this has already happened twice on Gemini and once on Groq in production).
 2. **Cross-provider fallback** (`scraper/llm.py`): every extraction/enrichment call tries
    Gemini first; if Gemini fails outright for that call (bad key, exhausted quota, every
-   model 404ing), it automatically retries through Groq (`scraper/groq_client.py`) instead.
-   Real redundancy against a full Gemini outage, not just a naming issue.
+   model 404ing, rate-limited past its retry budget), it automatically retries through Groq
+   instead. Real redundancy against a full Gemini outage, not just a naming issue. There's
+   also a small pacing delay (~2.5s) between batch calls in both phases, since free-tier
+   per-minute rate limits are easy to trip when batches fire back-to-back.
 3. **Fail loud instead of silently succeeding** (`scraper/main.py`): if literally every
    extraction batch fails on *both* providers, the job raises and exits non-zero — GitHub
    Actions marks the run red and (by default) emails the repo owner. Previously a total

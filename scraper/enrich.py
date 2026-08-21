@@ -15,6 +15,7 @@ expected rather than a bug.
 
 import json
 import re
+import time
 import requests
 
 from gemini_client import clean_json
@@ -150,6 +151,9 @@ one object per company, no markdown fences."""
 
 def _refine_with_llm(records, batch_size=8):
     for i in range(0, len(records), batch_size):
+        if i > 0:
+            time.sleep(2.5)  # spacing between batch calls -- free-tier RPM limits are easy to trip
+
         batch = records[i:i + batch_size]
         lines = []
         for idx, r in enumerate(batch):

@@ -7,6 +7,11 @@ Free tier at https://console.groq.com/keys. Set GROQ_API_KEY as an env var /
 repo secret to enable this fallback. If it's unset, call_groq() just returns
 None immediately -- there's no fallback available, and main.py's fail-loud
 check will surface that as a hard failure instead of a silent empty run.
+
+Model selection is auto-discovered (via Groq's OpenAI-compatible /models
+endpoint) rather than hardcoded -- a hardcoded "llama-3.3-70b-versatile" 404'd
+here once Groq retired it, the same class of problem gemini_client.py already
+guards against on the Gemini side. Set GROQ_MODEL as an env var to force one.
 """
 
 import os
@@ -14,38 +19,96 @@ import time
 import requests
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.3-70b-versatile"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+
+_state = {"model": None}
+
+
+def _list_models():
+    resp = requests.get(
+        f"{GROQ_BASE}/models",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+def _pick_model(models):
+    ids = [m.get("id", "") for m in models if m.get("id")]
+    # Prefer a general-purpose "versatile"/70b-class chat model; otherwise take whatever exists.
+    preferred = [i for i in ids if "70b" in i.lower() or "versatile" in i.lower()]
+    pick = preferred or ids
+    return pick[0] if pick else None
+
+
+def _discover():
+    try:
+        model = _pick_model(_list_models())
+        if model:
+            print(f"[info] Using Groq model '{model}'")
+            return model
+        print("[warn] Groq API key returned no usable models")
+    except Exception as e:
+        print(f"[warn] Could not list Groq models: {e}")
+    return None
+
+
+def _ensure_resolved():
+    if _state["model"]:
+        return
+    forced = os.environ.get("GROQ_MODEL")
+    if forced:
+        _state["model"] = forced
+        return
+    _state["model"] = _discover() or "llama-3.3-70b-versatile"
 
 
 def call_groq(system_prompt, user_prompt, retries=3, max_output_tokens=4000):
     if not GROQ_API_KEY:
         return None
 
+    _ensure_resolved()
+
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": max_output_tokens,
-    }
+
+    tried_rediscovery = False
 
     for attempt in range(retries):
+        model = _state["model"]
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": max_output_tokens,
+        }
+        url = f"{GROQ_BASE}/chat/completions"
         try:
-            resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=60)
+            resp = requests.post(url, headers=headers, json=payload, timeout=60)
+
+            if resp.status_code == 404 and not tried_rediscovery:
+                print(f"[warn] Groq model '{model}' -> 404: {resp.text[:300]}")
+                tried_rediscovery = True
+                new_model = _discover()
+                if new_model and new_model != model:
+                    _state["model"] = new_model
+                    continue
+
             if resp.status_code == 429:
                 wait = 5 * (attempt + 1)
                 print(f"[warn] Groq rate limited, waiting {wait}s")
                 time.sleep(wait)
                 continue
+
             if resp.status_code >= 400:
                 print(f"[warn] Groq call failed: {resp.status_code} {resp.text[:300]}")
+
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:

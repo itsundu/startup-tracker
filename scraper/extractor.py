@@ -10,9 +10,12 @@ Python (no LLM cost) via classify_region() / parse_funding_usd().
 
 import json
 import re
+import time
 
 from gemini_client import clean_json
 from llm import call_llm
+
+PACING_SECONDS = 2.5  # spacing between batch calls -- free-tier RPM limits are easy to trip otherwise
 
 SYSTEM_PROMPT = """You extract structured data about startup companies from news snippets.
 
@@ -54,6 +57,9 @@ def extract_startups(articles, batch_size=12):
     failed_batches = 0
 
     for i in range(0, len(articles), batch_size):
+        if batch_count > 0:
+            time.sleep(PACING_SECONDS)
+
         batch = articles[i:i + batch_size]
         batch_count += 1
         snippet_lines = []
