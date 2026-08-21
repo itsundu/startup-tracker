@@ -1,7 +1,8 @@
 """
-Phase 1: reads batches of article snippets and asks Gemini's free tier to
-identify which ones are about an actual AI / Tech / FinTech / PropTech /
-Real Estate startup, returning structured core fields.
+Phase 1: reads batches of article snippets and asks an LLM (Gemini primary,
+Groq fallback -- see llm.py) to identify which ones are about an actual
+AI / Tech / FinTech / PropTech / Real Estate startup, returning structured
+core fields.
 
 Region classification and funding-amount parsing happen afterward in plain
 Python (no LLM cost) via classify_region() / parse_funding_usd().
@@ -10,7 +11,8 @@ Python (no LLM cost) via classify_region() / parse_funding_usd().
 import json
 import re
 
-from gemini_client import call_gemini, clean_json
+from gemini_client import clean_json
+from llm import call_llm
 
 SYSTEM_PROMPT = """You extract structured data about startup companies from news snippets.
 
@@ -41,11 +43,19 @@ If no snippet in the batch qualifies, return an empty array: []
 
 def extract_startups(articles, batch_size=12):
     """articles: list of {title, summary, link, published, source_name}
-    Returns list of extracted startup dicts, each with 'source_url'/'source_name' attached.
+
+    Returns (results, batch_count, failed_batch_count). failed_batch_count counts
+    batches where BOTH LLM providers failed or returned unparseable output -- used
+    by main.py to fail the whole job loudly if every single batch failed (a real
+    outage), as opposed to batches that succeeded but legitimately found nothing.
     """
     results = []
+    batch_count = 0
+    failed_batches = 0
+
     for i in range(0, len(articles), batch_size):
         batch = articles[i:i + batch_size]
+        batch_count += 1
         snippet_lines = []
         for idx, art in enumerate(batch):
             snippet = f"{idx + 1}. TITLE: {art['title']}\n   SUMMARY: {art['summary'][:400]}"
@@ -53,14 +63,16 @@ def extract_startups(articles, batch_size=12):
 
         user_prompt = "Snippets:\n\n" + "\n\n".join(snippet_lines)
 
-        content = call_gemini(SYSTEM_PROMPT, user_prompt)
+        content, provider = call_llm(SYSTEM_PROMPT, user_prompt)
         if not content:
+            failed_batches += 1
             continue
 
         try:
             parsed = json.loads(clean_json(content))
         except json.JSONDecodeError:
-            print("[warn] Could not parse JSON from model output, skipping batch")
+            print(f"[warn] Could not parse JSON from {provider} output, skipping batch")
+            failed_batches += 1
             continue
 
         for record in parsed:
@@ -72,6 +84,8 @@ def extract_startups(articles, batch_size=12):
                 record["source_url"] = None
                 record["source_name"] = None
             results.append(record)
+
+    return results, batch_count, failed_batches
 
     return results
 

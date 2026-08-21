@@ -5,7 +5,8 @@ and pull founder / contact / hiring signals from it.
 Email, LinkedIn, and hiring-page detection are done with plain regex against
 fetched pages -- free, no LLM tokens spent. Founder name, year founded, and a
 one-line "unique moat" summary need judgement, so those go through one batched
-Gemini call across all enriched companies.
+LLM call (Gemini primary, Groq fallback -- see llm.py) across all enriched
+companies.
 
 Many startups simply don't publish a public email or LinkedIn link anywhere,
 even on their own site -- those fields will legitimately stay null, and that's
@@ -16,7 +17,8 @@ import json
 import re
 import requests
 
-from gemini_client import call_gemini, clean_json
+from gemini_client import clean_json
+from llm import call_llm
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; StartupTrackerBot/1.0)"}
 
@@ -158,7 +160,7 @@ def _refine_with_llm(records, batch_size=8):
             )
         user_prompt = "Companies:\n\n" + "\n\n".join(lines)
 
-        content = call_gemini(REFINE_SYSTEM_PROMPT, user_prompt, max_output_tokens=2000)
+        content, _provider = call_llm(REFINE_SYSTEM_PROMPT, user_prompt, max_output_tokens=2000)
         if not content:
             continue
         try:

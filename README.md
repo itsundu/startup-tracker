@@ -56,13 +56,14 @@ just headlines, no LLM involved, so daily is cheap).
    - `anon public` key → this is `SUPABASE_ANON_KEY` (safe to expose publicly, read-only)
    - `service_role` key → this is `SUPABASE_SERVICE_KEY` (**secret**, gives full write access — never put this in the frontend)
 
-### 2. Get a free Gemini API key
+### 2. Get free API keys: Gemini (primary) + Groq (fallback)
 
-1. Go to https://aistudio.google.com/app/apikey and sign up (free).
-2. Create an API key → this is `GEMINI_API_KEY`.
-   The free tier comfortably covers one weekly run over ~150–300 articles plus the
-   per-company enrichment pass; if you ever hit a rate limit, the job logs a warning,
-   retries with backoff, and moves on — nothing breaks the whole run.
+1. Gemini: go to https://aistudio.google.com/app/apikey and sign up (free) → create an
+   API key → this is `GEMINI_API_KEY`. The free tier comfortably covers one weekly run.
+2. Groq: go to https://console.groq.com/keys and sign up (free) → create an API key →
+   this is `GROQ_API_KEY`. This one is a **fallback only** — see "Reliability" below. The
+   job still runs fine without it, but a total Gemini outage would then fail loudly with
+   nothing to fall back to, instead of quietly recovering.
 
 ### 3. Push this code to GitHub
 
@@ -70,6 +71,7 @@ just headlines, no LLM involved, so daily is cheap).
 2. Push everything in this folder to it.
 3. Go to repo → Settings → Secrets and variables → Actions → New repository secret, and add:
    - `GEMINI_API_KEY`
+   - `GROQ_API_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_KEY`
 
@@ -119,6 +121,32 @@ a point), and whether any investor was named (a small bump for early/unstated-st
 startup with an unstated funding stage gets the lowest, most conservative score — that reflects
 missing information, not a negative judgment on the company.
 
+## Reliability: how production failures are handled
+
+This pipeline has broken in production before (Google renaming/retiring Gemini models out
+from under it), so three layers guard against it recurring silently:
+
+1. **Self-healing model selection** (`scraper/gemini_client.py`): rather than a hardcoded
+   model id, it asks Gemini's `ListModels` endpoint what's actually callable, tries both the
+   `v1beta` and `v1` API versions, and — if a 404 response names a replacement model
+   ("...use models/X instead") — switches straight to it. This alone fixes most future
+   renames automatically, with no code change needed.
+2. **Cross-provider fallback** (`scraper/llm.py`): every extraction/enrichment call tries
+   Gemini first; if Gemini fails outright for that call (bad key, exhausted quota, every
+   model 404ing), it automatically retries through Groq (`scraper/groq_client.py`) instead.
+   Real redundancy against a full Gemini outage, not just a naming issue.
+3. **Fail loud instead of silently succeeding** (`scraper/main.py`): if literally every
+   extraction batch fails on *both* providers, the job raises and exits non-zero — GitHub
+   Actions marks the run red and (by default) emails the repo owner. Previously a total
+   failure still "succeeded" with 0 rows upserted and no alert at all. A batch that succeeds
+   but legitimately finds zero qualifying startups is *not* treated as a failure — only a
+   batch where the LLM never returned usable output counts against this.
+
+On top of that, the frontend shows **"Last scan: <date>"** read from the `scan_log` table
+(not just the newest row in `startups`), and turns the status dot red with a "data may be
+stale" note if the most recent run is more than 10 days old — so staleness is visible on the
+site itself even if a GitHub Actions failure email gets missed.
+
 ## Notes and honest limitations
 
 - **Data quality**: pulls from public news (TechCrunch, VentureBeat, Fast Company, YourStory,
@@ -151,9 +179,12 @@ missing information, not a negative judgment on the company.
 
 - `supabase_schema.sql` — run once in Supabase (upgrade-safe)
 - `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world)
-- `scraper/extractor.py` — phase 1: Gemini extraction + region/funding-amount parsing
-- `scraper/enrich.py` — phase 2: company-website discovery + regex parsing + Gemini refine pass
-- `scraper/main.py` — orchestrates the weekly run and upserts into `startups`
+- `scraper/gemini_client.py` — Gemini API client with self-healing model/version discovery
+- `scraper/groq_client.py` — Groq API client, used only as a fallback (see Reliability above)
+- `scraper/llm.py` — tries Gemini then Groq for every LLM call; extractor.py/enrich.py use this
+- `scraper/extractor.py` — phase 1: LLM extraction + region/funding-amount/signal-score parsing
+- `scraper/enrich.py` — phase 2: company-website discovery + regex parsing + LLM refine pass
+- `scraper/main.py` — orchestrates the weekly run, upserts into `startups`, fails loud on total outage
 - `scraper/news_job.py` — orchestrates the daily headline refresh into `news_feed` (no LLM)
 - `.github/workflows/weekly.yml` — free weekly scheduler for the startup table
 - `.github/workflows/daily_news.yml` — free daily scheduler for the news sidebar

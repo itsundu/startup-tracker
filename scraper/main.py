@@ -83,11 +83,19 @@ def main():
     articles = fetch_all_articles()
     print(f"Fetched {len(articles)} unique articles.")
 
-    print("Extracting startup records with Gemini (phase 1)...")
-    records = extract_startups(articles)
-    print(f"Extracted {len(records)} candidate startup records.")
+    print("Extracting startup records (phase 1, Gemini primary / Groq fallback)...")
+    records, batch_count, failed_batches = extract_startups(articles)
+    print(f"Extracted {len(records)} candidate startup records ({failed_batches}/{batch_count} batches failed).")
 
-    print("Enriching records from company websites + Gemini refine pass (phase 2)...")
+    if batch_count > 0 and failed_batches == batch_count:
+        raise RuntimeError(
+            f"Every extraction batch failed on both Gemini and Groq ({failed_batches}/{batch_count}). "
+            "Treating this as a hard failure so the job exits non-zero, GitHub Actions flags the run "
+            "red, and you get notified -- instead of silently upserting nothing. Check API keys/quota "
+            "for both providers."
+        )
+
+    print("Enriching records from company websites + LLM refine pass (phase 2)...")
     records = enrich_all(records, articles)
 
     for r in records:
