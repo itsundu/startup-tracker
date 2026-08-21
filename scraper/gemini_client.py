@@ -5,16 +5,22 @@ Get a free key at https://aistudio.google.com/app/apikey and set it as the
 GEMINI_API_KEY environment variable / GitHub secret. The free tier covers a
 weekly run of this scraper comfortably.
 
-Model AND API-version selection are auto-discovered rather than hardcoded.
-Google has moved/retired model ids before (gemini-2.0-flash, then
-gemini-2.5-flash both 404'd here even though ListModels reported them as
-supporting generateContent) -- which points at a v1beta-vs-v1 mismatch as
-much as a model-name one. So this client tries both "v1beta" and "v1" and
-sticks with whichever one actually answers a generateContent call. Set
-GEMINI_MODEL as an env var / repo secret to force a specific model id.
+Model AND API-version selection are auto-discovered rather than hardcoded, because Google
+has retired model ids more than once here (gemini-2.0-flash, then gemini-2.5-flash both
+404'd eventually -- the latter with a 404 body that literally said "no longer available to
+new users, use models/gemini-3.6-flash instead"). Two layers of self-healing:
+
+1. If a 404's response body names a replacement model ("use models/X"), switch straight to
+   X and retry -- this is the most precise fix since Google is telling us the exact answer.
+2. Otherwise, fall back to trying both "v1beta" and "v1" and re-discovering a model via
+   ListModels, in case it's an API-version mismatch rather than a pure rename.
+
+Set GEMINI_MODEL as an env var / repo secret to force a specific model id and skip all of
+this (still tried against "v1beta" first).
 """
 
 import os
+import re
 import time
 import requests
 
@@ -78,7 +84,14 @@ def _ensure_resolved():
 
     # Discovery itself failed on both versions (e.g. network hiccup) -- last-resort guess.
     _state["version"] = API_VERSIONS[0]
-    _state["model"] = "gemini-2.5-flash"
+    _state["model"] = "gemini-3.6-flash"
+
+
+def _suggested_replacement(error_text):
+    """Google's 404 bodies sometimes say '...use models/gemini-X-flash instead' when a
+    model is retired. Pull that name out so we can switch to it directly."""
+    m = re.search(r'use\s+models/([a-zA-Z0-9_.\-]+)', error_text or "", re.IGNORECASE)
+    return m.group(1) if m else None
 
 
 def call_gemini(system_prompt, user_prompt, retries=4, max_output_tokens=4000):
@@ -109,6 +122,13 @@ def call_gemini(system_prompt, user_prompt, retries=4, max_output_tokens=4000):
 
             if resp.status_code == 404:
                 print(f"[warn] {version}/{model} -> 404: {resp.text[:300]}")
+
+                replacement = _suggested_replacement(resp.text)
+                if replacement and replacement != model:
+                    print(f"[info] Google's error suggested a replacement model: '{replacement}'")
+                    _state["model"] = replacement
+                    continue
+
                 if not tried_other_version:
                     tried_other_version = True
                     for v in API_VERSIONS:
