@@ -1,38 +1,35 @@
 """
-Uses Groq's free-tier API (OpenAI-compatible endpoint, no cost for supported
-models) to read a batch of raw article snippets and pull out structured
-startup / funding records as JSON.
+Phase 1: reads batches of article snippets and asks Gemini's free tier to
+identify which ones are about an actual AI / Tech / FinTech / PropTech /
+Real Estate startup, returning structured core fields.
 
-Get a free key at https://console.groq.com/keys and set it as the
-GROQ_API_KEY environment variable / GitHub secret.
+Region classification and funding-amount parsing happen afterward in plain
+Python (no LLM cost) via classify_region() / parse_funding_usd().
 """
 
 import json
-import os
-import time
-import requests
+import re
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.3-70b-versatile"  # free-tier model on Groq as of writing
+from gemini_client import call_gemini, clean_json
 
 SYSTEM_PROMPT = """You extract structured data about startup companies from news snippets.
 
 You will be given a numbered list of article title+summary snippets. For each snippet that is
-ACTUALLY about a specific startup (new company launch, funding round, product launch by an
-early-stage company) in technology, telecommunications, AI, engineering, or software services,
-output one JSON object. Ignore snippets about large public companies, general commentary,
-opinion pieces, or anything not about a specific identifiable startup.
+ACTUALLY about a specific startup (new company launch, funding round, or notable product launch
+by an early/growth-stage private company) in one of these categories: AI, general Technology/
+Software, FinTech, PropTech, or Real Estate -- output one JSON object. Ignore snippets about large
+public companies, general commentary/opinion pieces, or anything not about one specific identifiable
+private startup.
 
-Return ONLY a JSON array (no markdown fences, no preamble, no explanation). Each object must have
-exactly these fields, using null when truly unknown -- never invent facts that aren't in the text:
+Return ONLY a JSON array (no markdown fences, no preamble). Each object must have exactly these
+fields, using null when truly unknown -- never invent facts that aren't in the text:
 
 {
   "company_name": string,
   "business_idea": string,          // one clear sentence: what the company does
-  "sector": string,                 // e.g. "AI", "Fintech", "Telecom", "Enterprise Software", "Robotics"
+  "industry": string,               // one of: "AI", "Technology", "FinTech", "PropTech", "Real Estate"
   "location": string or null,       // city/country if mentioned
-  "funding_stage": string or null,  // e.g. "Seed", "Series A", "Pre-seed", "Series B", "Unfunded"
+  "funding_stage": string or null,  // e.g. "Pre-seed", "Seed", "Series A", "Series B"
   "funding_amount": string or null, // e.g. "$4.2M" -- as stated in the text, do not convert
   "investors": string or null,      // comma-separated investor/VC names if mentioned
   "source_index": integer           // the number of the snippet this came from
@@ -42,49 +39,10 @@ If no snippet in the batch qualifies, return an empty array: []
 """
 
 
-def _call_groq(messages, retries=3):
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": MODEL,
-        "messages": messages,
-        "temperature": 0.1,
-        "max_tokens": 4000,
-    }
-    for attempt in range(retries):
-        try:
-            resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=60)
-            if resp.status_code == 429:
-                wait = 5 * (attempt + 1)
-                print(f"[warn] Groq rate limited, waiting {wait}s")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"[warn] Groq call failed (attempt {attempt + 1}): {e}")
-            time.sleep(3)
-    return None
-
-
-def _clean_json(text):
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return text.strip()
-
-
 def extract_startups(articles, batch_size=12):
     """articles: list of {title, summary, link, published, source_name}
-    Returns list of extracted startup dicts, each with 'source_url' and 'source_name' attached.
+    Returns list of extracted startup dicts, each with 'source_url'/'source_name' attached.
     """
-    if not GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY environment variable is not set")
-
     results = []
     for i in range(0, len(articles), batch_size):
         batch = articles[i:i + batch_size]
@@ -95,15 +53,12 @@ def extract_startups(articles, batch_size=12):
 
         user_prompt = "Snippets:\n\n" + "\n\n".join(snippet_lines)
 
-        content = _call_groq([
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ])
+        content = call_gemini(SYSTEM_PROMPT, user_prompt)
         if not content:
             continue
 
         try:
-            parsed = json.loads(_clean_json(content))
+            parsed = json.loads(clean_json(content))
         except json.JSONDecodeError:
             print("[warn] Could not parse JSON from model output, skipping batch")
             continue
@@ -119,3 +74,40 @@ def extract_startups(articles, batch_size=12):
             results.append(record)
 
     return results
+
+
+INDIA_TERMS = [
+    "india", "bangalore", "bengaluru", "mumbai", "new delhi", "delhi", "hyderabad",
+    "pune", "gurgaon", "gurugram", "noida", "kolkata", "ahmedabad", "chennai",
+]
+USA_TERMS = [
+    "usa", "u.s.", "united states", "california", "new york", "san francisco",
+    "seattle", "boston", "chicago", "austin", "los angeles", "miami",
+    "silicon valley", "texas", "washington", "denver", "atlanta",
+]
+
+
+def classify_region(location):
+    """Rule-based, zero-LLM-cost region tagging used for the site's region filter."""
+    if not location:
+        return "Unknown"
+    loc = location.lower()
+    if "chennai" in loc:
+        return "India (Chennai)"
+    if any(t in loc for t in INDIA_TERMS):
+        return "India"
+    if any(t in loc for t in USA_TERMS):
+        return "USA"
+    return "Rest of World"
+
+
+def parse_funding_usd(text):
+    """Best-effort '$4.2M' / '$500K' / '$1.1B' -> numeric USD, used only for sorting the top-100 view."""
+    if not text:
+        return None
+    m = re.search(r'\$\s*([\d,]+(?:\.\d+)?)\s*([kmb])\b', text, re.IGNORECASE)
+    if not m:
+        return None
+    num = float(m.group(1).replace(",", ""))
+    mult = {"k": 1e3, "m": 1e6, "b": 1e9}[m.group(2).lower()]
+    return int(num * mult)

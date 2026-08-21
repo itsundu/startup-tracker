@@ -1,5 +1,6 @@
 """
-Free, no-paid-key data sources for startup / funding news.
+Free, no-paid-key data sources for startup / funding news, covering USA,
+India (including Chennai), and rest-of-world coverage.
 
 Each function returns a list of dicts:
   {"title": str, "summary": str, "link": str, "published": str, "source_name": str}
@@ -12,10 +13,19 @@ import feedparser
 import requests
 
 RSS_FEEDS = [
+    # USA
     ("TechCrunch - Startups", "https://techcrunch.com/category/startups/feed/"),
     ("TechCrunch - Venture", "https://techcrunch.com/category/venture/feed/"),
     ("VentureBeat", "https://venturebeat.com/feed/"),
     ("Fast Company - Tech", "https://www.fastcompany.com/technology/rss"),
+    # India (incl. Chennai coverage)
+    ("YourStory", "https://yourstory.com/feed"),
+    ("Inc42", "https://inc42.com/feed/"),
+    ("Entrackr", "https://entrackr.com/feed"),
+    # Rest of world
+    ("EU-Startups", "https://www.eu-startups.com/feed/"),
+    ("Silicon Canals", "https://siliconcanals.com/feed/"),
+    ("Tech in Asia", "https://www.techinasia.com/feed"),
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; StartupTrackerBot/1.0)"}
@@ -42,7 +52,10 @@ def fetch_rss_sources():
 def fetch_hn_funding_stories():
     """Hacker News via the free Algolia HN Search API (no key required)."""
     items = []
-    queries = ["raises seed", "raises Series A", "raises funding", "launches startup"]
+    queries = [
+        "raises seed", "raises Series A", "raises funding", "launches startup",
+        "fintech startup", "proptech startup", "raises Series B",
+    ]
     for q in queries:
         try:
             resp = requests.get(

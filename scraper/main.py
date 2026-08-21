@@ -2,7 +2,8 @@ import os
 import requests
 
 from sources import fetch_all_articles
-from extractor import extract_startups
+from extractor import extract_startups, classify_region, parse_funding_usd
+from enrich import enrich_all
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -23,19 +24,27 @@ def upsert_startups(records):
     }
     params = {"on_conflict": "company_name"}
 
-    # Supabase/PostgREST wants a clean list of dicts matching table columns
     cleaned = []
     for r in records:
         if not r.get("company_name"):
             continue
         cleaned.append({
             "company_name": r.get("company_name"),
-            "business_idea": r.get("business_idea"),
-            "sector": r.get("sector"),
             "location": r.get("location"),
+            "region": r.get("region"),
+            "year_founded": r.get("year_founded"),
+            "founder_name": r.get("founder_name"),
+            "founder_linkedin": r.get("founder_linkedin"),
+            "industry": r.get("industry"),
+            "business_idea": r.get("business_idea"),
+            "unique_moat": r.get("unique_moat"),
             "funding_stage": r.get("funding_stage"),
             "funding_amount": r.get("funding_amount"),
+            "funding_amount_usd": r.get("funding_amount_usd"),
             "investors": r.get("investors"),
+            "contact_email": r.get("contact_email"),
+            "hiring_status": r.get("hiring_status"),
+            "homepage": r.get("homepage"),
             "source_url": r.get("source_url"),
             "source_name": r.get("source_name"),
         })
@@ -73,9 +82,16 @@ def main():
     articles = fetch_all_articles()
     print(f"Fetched {len(articles)} unique articles.")
 
-    print("Extracting startup records with Groq...")
+    print("Extracting startup records with Gemini (phase 1)...")
     records = extract_startups(articles)
     print(f"Extracted {len(records)} candidate startup records.")
+
+    print("Enriching records from company websites + Gemini refine pass (phase 2)...")
+    records = enrich_all(records, articles)
+
+    for r in records:
+        r["region"] = classify_region(r.get("location"))
+        r["funding_amount_usd"] = parse_funding_usd(r.get("funding_amount"))
 
     written = upsert_startups(records)
     print(f"Upserted {written} rows into Supabase.")

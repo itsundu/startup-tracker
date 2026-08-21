@@ -132,7 +132,7 @@
   <header>
     <div>
       <div class="brand">TERRALYTIX<span>AI</span> · STARTUP SIGNAL</div>
-      <div class="subtitle">A daily automated scan of newly launched &amp; newly funded tech, AI, telecom, and software companies worldwide.</div>
+      <div class="subtitle">Top 100 AI, Tech, FinTech, PropTech &amp; Real Estate startups — USA, India (incl. Chennai) &amp; worldwide. Ranked by disclosed funding, refreshed weekly.</div>
     </div>
     <div class="status"><span class="dot"></span><span id="last-updated">Loading last scan…</span></div>
   </header>
@@ -145,8 +145,10 @@
 
   <div class="controls">
     <input type="text" id="search" placeholder="Search company, idea, investor, location…">
-    <select id="filter-sector"><option value="">All sectors</option></select>
+    <select id="filter-region"><option value="">All regions</option></select>
+    <select id="filter-industry"><option value="">All industries</option></select>
     <select id="filter-stage"><option value="">All stages</option></select>
+    <select id="filter-hiring"><option value="">Hiring: any</option></select>
   </div>
 
   <div class="table-outer">
@@ -154,24 +156,32 @@
       <thead>
         <tr>
           <th data-key="company_name">Company</th>
-          <th data-key="business_idea">Idea</th>
-          <th data-key="sector">Sector</th>
+          <th data-key="region">Region</th>
           <th data-key="location">Location</th>
+          <th data-key="year_founded">Founded</th>
+          <th data-key="founder_name">Founder</th>
+          <th data-key="industry">Industry</th>
+          <th data-key="business_idea">What they do</th>
+          <th data-key="unique_moat">Moat</th>
           <th data-key="funding_stage">Stage</th>
           <th data-key="funding_amount">Amount</th>
           <th data-key="investors">Investors</th>
+          <th data-key="contact_email">Contact</th>
+          <th data-key="hiring_status">Hiring</th>
           <th data-key="source_name">Source</th>
         </tr>
       </thead>
       <tbody id="table-body">
-        <tr><td colspan="8" class="loading">Loading startups…</td></tr>
+        <tr><td colspan="14" class="loading">Loading startups…</td></tr>
       </tbody>
     </table>
   </div>
 
   <footer>
-    Sourced automatically from public news &amp; startup feeds. Entries reflect what public sources reported and may be incomplete or unconfirmed.
-    Updated once daily.
+    Sourced automatically from public news &amp; startup feeds, with light enrichment from each
+    company's own website. Founder LinkedIn, contact email, and hiring status are often unavailable
+    even on official sites, so those fields are frequently blank. Entries reflect what public sources
+    reported and may be incomplete or unconfirmed. Updated weekly.
   </footer>
 
 </div>
@@ -180,14 +190,14 @@
   // ---- Fill these in with your Supabase project's values ----
   // Project Settings -> API in your Supabase dashboard.
   // The "anon public" key is safe to expose here: it can only READ (see RLS policy in supabase_schema.sql).
-  const SUPABASE_URL = "YOUR_SUPABASE_URL";        // e.g. https://xxxxx.supabase.co
-  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+  const SUPABASE_URL = "https://ivxftbgzxxdacizxwnhc.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_ZQzA66pSAJvAV07BHaLZDg_OLxHdcnO";
   // -------------------------------------------------------------
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let allRows = [];
-  let sortKey = "last_updated";
+  let sortKey = "funding_amount_usd";
   let sortDir = -1;
 
   function fmtDate(d){
@@ -203,17 +213,30 @@
   }
 
   function populateFilters(rows){
-    const sectorSel = document.getElementById("filter-sector");
+    const regionSel = document.getElementById("filter-region");
+    const industrySel = document.getElementById("filter-industry");
     const stageSel = document.getElementById("filter-stage");
-    const sectors = [...new Set(rows.map(r=>r.sector).filter(Boolean))].sort();
+    const hiringSel = document.getElementById("filter-hiring");
+
+    const regions = [...new Set(rows.map(r=>r.region).filter(Boolean))].sort();
+    const industries = [...new Set(rows.map(r=>r.industry).filter(Boolean))].sort();
     const stages = [...new Set(rows.map(r=>r.funding_stage).filter(Boolean))].sort();
-    sectors.forEach(s=>{
+
+    regions.forEach(s=>{
       const o = document.createElement("option"); o.value=s; o.textContent=s;
-      sectorSel.appendChild(o);
+      regionSel.appendChild(o);
+    });
+    industries.forEach(s=>{
+      const o = document.createElement("option"); o.value=s; o.textContent=s;
+      industrySel.appendChild(o);
     });
     stages.forEach(s=>{
       const o = document.createElement("option"); o.value=s; o.textContent=s;
       stageSel.appendChild(o);
+    });
+    [["Likely hiring","Likely hiring"]].forEach(([v,label])=>{
+      const o = document.createElement("option"); o.value=v; o.textContent=label;
+      hiringSel.appendChild(o);
     });
   }
 
@@ -237,20 +260,29 @@
 
   function renderTable(){
     const q = document.getElementById("search").value.toLowerCase();
-    const sector = document.getElementById("filter-sector").value;
+    const region = document.getElementById("filter-region").value;
+    const industry = document.getElementById("filter-industry").value;
     const stage = document.getElementById("filter-stage").value;
+    const hiring = document.getElementById("filter-hiring").value;
 
     let rows = allRows.filter(r=>{
-      if(sector && r.sector !== sector) return false;
+      if(region && r.region !== region) return false;
+      if(industry && r.industry !== industry) return false;
       if(stage && r.funding_stage !== stage) return false;
+      if(hiring && r.hiring_status !== hiring) return false;
       if(q){
-        const hay = [r.company_name, r.business_idea, r.investors, r.location].join(" ").toLowerCase();
+        const hay = [r.company_name, r.business_idea, r.unique_moat, r.investors, r.location, r.founder_name].join(" ").toLowerCase();
         if(!hay.includes(q)) return false;
       }
       return true;
     });
 
     rows.sort((a,b)=>{
+      if(sortKey === "funding_amount_usd"){
+        const av = a.funding_amount_usd ?? -1;
+        const bv = b.funding_amount_usd ?? -1;
+        return (av - bv) * sortDir;
+      }
       const av = (a[sortKey] ?? "").toString();
       const bv = (b[sortKey] ?? "").toString();
       return av.localeCompare(bv) * sortDir;
@@ -258,19 +290,25 @@
 
     const body = document.getElementById("table-body");
     if(rows.length === 0){
-      body.innerHTML = `<tr><td colspan="8" class="empty">No startups match these filters yet.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="14" class="empty">No startups match these filters yet.</td></tr>`;
       return;
     }
 
     body.innerHTML = rows.map(r => `
       <tr>
         <td data-label="Company"><span class="company">${escapeHtml(r.company_name)}</span>${isRecent(r.last_updated) ? '<span class="badge-new">NEW</span>' : ''}</td>
-        <td data-label="Idea">${escapeHtml(r.business_idea)}</td>
-        <td data-label="Sector">${escapeHtml(r.sector)}</td>
+        <td data-label="Region">${escapeHtml(r.region) || '<span class="muted">—</span>'}</td>
         <td data-label="Location">${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
+        <td data-label="Founded">${escapeHtml(r.year_founded) || '<span class="muted">—</span>'}</td>
+        <td data-label="Founder">${r.founder_linkedin ? `<a class="src" href="${r.founder_linkedin}" target="_blank" rel="noopener">${escapeHtml(r.founder_name || 'LinkedIn')}</a>` : (escapeHtml(r.founder_name) || '<span class="muted">—</span>')}</td>
+        <td data-label="Industry">${escapeHtml(r.industry) || '<span class="muted">—</span>'}</td>
+        <td data-label="What they do">${escapeHtml(r.business_idea)}</td>
+        <td data-label="Moat">${escapeHtml(r.unique_moat) || '<span class="muted">—</span>'}</td>
         <td data-label="Stage">${escapeHtml(r.funding_stage) || '<span class="muted">—</span>'}</td>
         <td data-label="Amount">${escapeHtml(r.funding_amount) || '<span class="muted">—</span>'}</td>
         <td data-label="Investors">${escapeHtml(r.investors) || '<span class="muted">—</span>'}</td>
+        <td data-label="Contact">${r.contact_email ? `<a class="src" href="mailto:${escapeHtml(r.contact_email)}">${escapeHtml(r.contact_email)}</a>` : '<span class="muted">—</span>'}</td>
+        <td data-label="Hiring">${escapeHtml(r.hiring_status) || '<span class="muted">—</span>'}</td>
         <td data-label="Source">${r.source_url ? `<a class="src" href="${r.source_url}" target="_blank" rel="noopener">${escapeHtml(r.source_name || 'link')}</a>` : '<span class="muted">—</span>'}</td>
       </tr>
     `).join("");
@@ -280,12 +318,13 @@
     const { data, error } = await client
       .from("startups")
       .select("*")
+      .order("funding_amount_usd", { ascending: false, nullsFirst: false })
       .order("last_updated", { ascending: false })
-      .limit(1000);
+      .limit(100);
 
     if(error){
       document.getElementById("table-body").innerHTML =
-        `<tr><td colspan="8" class="empty">Couldn't load data. Check the Supabase URL/key in this page's script.</td></tr>`;
+        `<tr><td colspan="14" class="empty">Couldn't load data. Check the Supabase URL/key in this page's script.</td></tr>`;
       console.error(error);
       return;
     }
@@ -302,8 +341,10 @@
   }
 
   document.getElementById("search").addEventListener("input", renderTable);
-  document.getElementById("filter-sector").addEventListener("change", renderTable);
+  document.getElementById("filter-region").addEventListener("change", renderTable);
+  document.getElementById("filter-industry").addEventListener("change", renderTable);
   document.getElementById("filter-stage").addEventListener("change", renderTable);
+  document.getElementById("filter-hiring").addEventListener("change", renderTable);
   document.querySelectorAll("thead th").forEach(th=>{
     th.addEventListener("click", ()=>{
       const key = th.dataset.key;
