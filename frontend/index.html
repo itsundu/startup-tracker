@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Startup Signal — Terralytix AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:        #0B1120;
+    --bg-panel:  #101A2C;
+    --line:      #1E2A3A;
+    --ink:       #EDEAE3;
+    --ink-dim:   #8B97A8;
+    --amber:     #F2A93B;
+    --teal:      #3FB6A8;
+    --radius:    10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 20px 64px;}
+
+  /* Header */
+  header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:22px;}
+  .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;letter-spacing:-0.01em;}
+  .brand span{color:var(--amber);}
+  .subtitle{color:var(--ink-dim);font-size:13px;margin-top:4px;letter-spacing:.02em;}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(63,182,168,.6);animation:pulse 2s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(63,182,168,.55);}
+    70%{box-shadow:0 0 0 8px rgba(63,182,168,0);}
+    100%{box-shadow:0 0 0 0 rgba(63,182,168,0);}
+  }
+
+  /* Ticker */
+  .ticker-outer{
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+    white-space:nowrap;
+    position:relative;
+    margin-bottom:26px;
+    background:var(--bg-panel);
+  }
+  .ticker-track{
+    display:inline-block;
+    padding:10px 0;
+    animation:scroll 32s linear infinite;
+  }
+  .ticker-track span{margin-right:40px;font-size:13px;color:var(--ink-dim);}
+  .ticker-track b{color:var(--amber);font-weight:600;}
+  @keyframes scroll{
+    0%{transform:translateX(0);}
+    100%{transform:translateX(-50%);}
+  }
+
+  /* Controls */
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;}
+  .controls input, .controls select{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    color:var(--ink);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    padding:9px 12px;
+    border-radius:var(--radius);
+    outline:none;
+  }
+  .controls input{flex:1;min-width:200px;}
+  .controls input:focus, .controls select:focus{border-color:var(--amber);}
+
+  /* Table */
+  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--ink-dim);
+    background:var(--bg-panel);
+    padding:12px 14px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  thead th:hover{color:var(--amber);}
+  tbody td{
+    padding:12px 14px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+    color:var(--ink);
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(242,169,59,0.04);}
+  .company{font-weight:600;font-family:'Space Grotesk',sans-serif;}
+  .badge-new{
+    display:inline-block;margin-left:8px;font-size:9px;font-family:'Space Grotesk',sans-serif;
+    background:var(--amber);color:#1a1204;padding:1px 6px;border-radius:4px;font-weight:700;
+    letter-spacing:.04em;vertical-align:middle;
+  }
+  .muted{color:var(--ink-dim);}
+  a.src{color:var(--teal);text-decoration:none;}
+  a.src:hover{text-decoration:underline;}
+  .empty, .loading{padding:60px 20px;text-align:center;color:var(--ink-dim);}
+
+  footer{margin-top:26px;font-size:11px;color:var(--ink-dim);text-align:center;}
+
+  @media (max-width:700px){
+    thead{display:none;}
+    table, tbody, tr, td{display:block;width:100%;}
+    tbody tr{border-bottom:1px solid var(--line);padding:10px 0;}
+    tbody td{border-bottom:none;padding:4px 14px;}
+    tbody td:before{content:attr(data-label);display:block;font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand">TERRALYTIX<span>AI</span> · STARTUP SIGNAL</div>
+      <div class="subtitle">A daily automated scan of newly launched &amp; newly funded tech, AI, telecom, and software companies worldwide.</div>
+    </div>
+    <div class="status"><span class="dot"></span><span id="last-updated">Loading last scan…</span></div>
+  </header>
+
+  <div class="ticker-outer">
+    <div class="ticker-track" id="ticker">
+      <span>Scanning global feeds…</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search company, idea, investor, location…">
+    <select id="filter-sector"><option value="">All sectors</option></select>
+    <select id="filter-stage"><option value="">All stages</option></select>
+  </div>
+
+  <div class="table-outer">
+    <table id="startup-table">
+      <thead>
+        <tr>
+          <th data-key="company_name">Company</th>
+          <th data-key="business_idea">Idea</th>
+          <th data-key="sector">Sector</th>
+          <th data-key="location">Location</th>
+          <th data-key="funding_stage">Stage</th>
+          <th data-key="funding_amount">Amount</th>
+          <th data-key="investors">Investors</th>
+          <th data-key="source_name">Source</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr><td colspan="8" class="loading">Loading startups…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Sourced automatically from public news &amp; startup feeds. Entries reflect what public sources reported and may be incomplete or unconfirmed.
+    Updated once daily.
+  </footer>
+
+</div>
+
+<script>
+  // ---- Fill these in with your Supabase project's values ----
+  // Project Settings -> API in your Supabase dashboard.
+  // The "anon public" key is safe to expose here: it can only READ (see RLS policy in supabase_schema.sql).
+  const SUPABASE_URL = "YOUR_SUPABASE_URL";        // e.g. https://xxxxx.supabase.co
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+  // -------------------------------------------------------------
+
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let allRows = [];
+  let sortKey = "last_updated";
+  let sortDir = -1;
+
+  function fmtDate(d){
+    if(!d) return "";
+    const dt = new Date(d);
+    return dt.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  }
+
+  function isRecent(dateStr){
+    if(!dateStr) return false;
+    const hours = (Date.now() - new Date(dateStr).getTime()) / 36e5;
+    return hours <= 24;
+  }
+
+  function populateFilters(rows){
+    const sectorSel = document.getElementById("filter-sector");
+    const stageSel = document.getElementById("filter-stage");
+    const sectors = [...new Set(rows.map(r=>r.sector).filter(Boolean))].sort();
+    const stages = [...new Set(rows.map(r=>r.funding_stage).filter(Boolean))].sort();
+    sectors.forEach(s=>{
+      const o = document.createElement("option"); o.value=s; o.textContent=s;
+      sectorSel.appendChild(o);
+    });
+    stages.forEach(s=>{
+      const o = document.createElement("option"); o.value=s; o.textContent=s;
+      stageSel.appendChild(o);
+    });
+  }
+
+  function renderTicker(rows){
+    const track = document.getElementById("ticker");
+    const recent = rows.slice(0, 12);
+    if(recent.length === 0){
+      track.innerHTML = "<span>No signals yet — first scan pending.</span>";
+      return;
+    }
+    const build = recent.map(r =>
+      `<span><b>${escapeHtml(r.company_name)}</b> — ${escapeHtml(r.funding_stage || "new listing")}${r.funding_amount ? " · " + escapeHtml(r.funding_amount) : ""}</span>`
+    ).join("");
+    track.innerHTML = build + build; // duplicate for seamless scroll loop
+  }
+
+  function escapeHtml(str){
+    if(str === null || str === undefined) return "";
+    return String(str).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  }
+
+  function renderTable(){
+    const q = document.getElementById("search").value.toLowerCase();
+    const sector = document.getElementById("filter-sector").value;
+    const stage = document.getElementById("filter-stage").value;
+
+    let rows = allRows.filter(r=>{
+      if(sector && r.sector !== sector) return false;
+      if(stage && r.funding_stage !== stage) return false;
+      if(q){
+        const hay = [r.company_name, r.business_idea, r.investors, r.location].join(" ").toLowerCase();
+        if(!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    rows.sort((a,b)=>{
+      const av = (a[sortKey] ?? "").toString();
+      const bv = (b[sortKey] ?? "").toString();
+      return av.localeCompare(bv) * sortDir;
+    });
+
+    const body = document.getElementById("table-body");
+    if(rows.length === 0){
+      body.innerHTML = `<tr><td colspan="8" class="empty">No startups match these filters yet.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map(r => `
+      <tr>
+        <td data-label="Company"><span class="company">${escapeHtml(r.company_name)}</span>${isRecent(r.last_updated) ? '<span class="badge-new">NEW</span>' : ''}</td>
+        <td data-label="Idea">${escapeHtml(r.business_idea)}</td>
+        <td data-label="Sector">${escapeHtml(r.sector)}</td>
+        <td data-label="Location">${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
+        <td data-label="Stage">${escapeHtml(r.funding_stage) || '<span class="muted">—</span>'}</td>
+        <td data-label="Amount">${escapeHtml(r.funding_amount) || '<span class="muted">—</span>'}</td>
+        <td data-label="Investors">${escapeHtml(r.investors) || '<span class="muted">—</span>'}</td>
+        <td data-label="Source">${r.source_url ? `<a class="src" href="${r.source_url}" target="_blank" rel="noopener">${escapeHtml(r.source_name || 'link')}</a>` : '<span class="muted">—</span>'}</td>
+      </tr>
+    `).join("");
+  }
+
+  async function load(){
+    const { data, error } = await client
+      .from("startups")
+      .select("*")
+      .order("last_updated", { ascending: false })
+      .limit(1000);
+
+    if(error){
+      document.getElementById("table-body").innerHTML =
+        `<tr><td colspan="8" class="empty">Couldn't load data. Check the Supabase URL/key in this page's script.</td></tr>`;
+      console.error(error);
+      return;
+    }
+
+    allRows = data || [];
+    populateFilters(allRows);
+    renderTicker(allRows);
+    renderTable();
+
+    const latest = allRows[0]?.last_updated;
+    document.getElementById("last-updated").textContent = latest
+      ? `Last scan: ${fmtDate(latest)}`
+      : "No scans yet";
+  }
+
+  document.getElementById("search").addEventListener("input", renderTable);
+  document.getElementById("filter-sector").addEventListener("change", renderTable);
+  document.getElementById("filter-stage").addEventListener("change", renderTable);
+  document.querySelectorAll("thead th").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const key = th.dataset.key;
+      if(sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+      renderTable();
+    });
+  });
+
+  load();
+</script>
+</body>
+</html>
