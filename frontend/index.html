@@ -20,6 +20,8 @@
     --amber:      #B4720E;
     --amber-ink:  #FFF7EA;
     --teal:       #1B8C7D;
+    --teal-tint:  rgba(27,140,125,.12);
+    --amber-tint: rgba(180,114,14,.12);
     --shadow:     0 1px 2px rgba(16,24,40,.04), 0 1px 6px rgba(16,24,40,.05);
     --radius:     12px;
     --radius-sm:  8px;
@@ -34,6 +36,8 @@
     --amber:      #F2A93B;
     --amber-ink:  #1a1204;
     --teal:       #3FB6A8;
+    --teal-tint:  rgba(63,182,168,.15);
+    --amber-tint: rgba(242,169,59,.15);
     --shadow:     0 1px 2px rgba(0,0,0,.4);
   }
   *{box-sizing:border-box;}
@@ -179,10 +183,14 @@
   .muted{color:var(--ink-dim);}
   a.src{color:var(--teal);text-decoration:none;}
   a.src:hover{text-decoration:underline;}
-  .signal{font-size:13px;letter-spacing:1px;white-space:nowrap;cursor:help;}
-  .signal-high{color:var(--teal);}
-  .signal-mid{color:var(--amber);}
-  .signal-low{color:var(--ink-dim);}
+  .momentum-badge{
+    display:inline-block;min-width:32px;text-align:center;
+    padding:2px 8px;border-radius:999px;font-weight:700;font-size:12px;
+    font-family:'Space Grotesk',sans-serif;cursor:help;white-space:nowrap;
+  }
+  .momentum-badge.signal-high{background:var(--teal-tint);color:var(--teal);}
+  .momentum-badge.signal-mid{background:var(--amber-tint);color:var(--amber);}
+  .momentum-badge.signal-low{background:var(--bg-alt);color:var(--ink-dim);}
   .empty, .loading{padding:60px 20px;text-align:center;color:var(--ink-dim);}
 
   /* News sidebar */
@@ -281,7 +289,7 @@
               <th data-key="unique_moat">Moat</th>
               <th data-key="funding_stage">Stage</th>
               <th data-key="funding_amount">Amount</th>
-              <th data-key="signal_score">Signal</th>
+              <th data-key="momentum_score">Momentum</th>
               <th data-key="investors">Investors</th>
               <th data-key="contact_email">Contact</th>
               <th data-key="hiring_status">Hiring</th>
@@ -340,7 +348,7 @@
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let allRows = [];
-  let sortKey = "funding_amount_usd";
+  let sortKey = "momentum_score";
   let sortDir = -1;
 
   function fmtDate(d){
@@ -425,12 +433,12 @@
     track.innerHTML = build + build; // duplicate for seamless scroll loop
   }
 
-  function renderSignal(score){
-    if(!score) return '<span class="muted">—</span>';
-    const s = Math.max(1, Math.min(5, score));
-    const tier = s >= 4 ? "signal-high" : (s >= 3 ? "signal-mid" : "signal-low");
-    const stars = "★".repeat(s) + "☆".repeat(5 - s);
-    return `<span class="signal ${tier}" title="Signal ${s}/5 — a heuristic from disclosed funding stage/amount/investors, not a verified valuation">${stars}</span>`;
+  function renderMomentum(score, confidence){
+    if(score === null || score === undefined) return '<span class="muted">—</span>';
+    const s = Math.max(0, Math.min(100, score));
+    const tier = s >= 70 ? "signal-high" : (s >= 40 ? "signal-mid" : "signal-low");
+    const confTxt = (confidence !== null && confidence !== undefined) ? ` · ${confidence}% data completeness` : '';
+    return `<span class="momentum-badge ${tier}" title="Momentum ${s}/100${confTxt} — a heuristic from disclosed funding stage/amount/investor presence/hiring signal. Not a valuation or a prediction.">${s}</span>`;
   }
 
   function escapeHtml(str){
@@ -461,10 +469,11 @@
       return true;
     });
 
+    const NUMERIC_KEYS = ["funding_amount_usd", "momentum_score", "data_confidence"];
     rows.sort((a,b)=>{
-      if(sortKey === "funding_amount_usd"){
-        const av = a.funding_amount_usd ?? -1;
-        const bv = b.funding_amount_usd ?? -1;
+      if(NUMERIC_KEYS.includes(sortKey)){
+        const av = a[sortKey] ?? -1;
+        const bv = b[sortKey] ?? -1;
         return (av - bv) * sortDir;
       }
       const av = (a[sortKey] ?? "").toString();
@@ -490,7 +499,7 @@
         <td data-label="Moat">${escapeHtml(r.unique_moat) || '<span class="muted">—</span>'}</td>
         <td data-label="Stage">${escapeHtml(r.funding_stage) || '<span class="muted">—</span>'}</td>
         <td data-label="Amount">${escapeHtml(r.funding_amount) || '<span class="muted">—</span>'}</td>
-        <td data-label="Signal">${renderSignal(r.signal_score)}</td>
+        <td data-label="Momentum">${renderMomentum(r.momentum_score, r.data_confidence)}</td>
         <td data-label="Investors">${escapeHtml(r.investors) || '<span class="muted">—</span>'}</td>
         <td data-label="Contact">${r.contact_email ? `<a class="src" href="mailto:${escapeHtml(r.contact_email)}">${escapeHtml(r.contact_email)}</a>` : '<span class="muted">—</span>'}</td>
         <td data-label="Hiring">${escapeHtml(r.hiring_status) || '<span class="muted">—</span>'}</td>
@@ -503,6 +512,7 @@
     const { data, error } = await client
       .from("startups")
       .select("*")
+      .order("momentum_score", { ascending: false, nullsFirst: false })
       .order("funding_amount_usd", { ascending: false, nullsFirst: false })
       .order("last_updated", { ascending: false })
       .limit(100);

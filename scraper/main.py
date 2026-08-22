@@ -2,25 +2,30 @@ import os
 import requests
 
 from sources import fetch_all_articles
-from extractor import extract_startups, classify_region, parse_funding_usd, compute_signal_score
+from extractor import extract_startups, classify_region, parse_funding_usd
 from enrich import enrich_all
+from scoring import fetch_weights, compute_momentum_score, compute_data_confidence
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
 
 def upsert_startups(records):
+    """Upserts into `startups` and returns the upserted rows (with their real `id`s),
+    so callers can write company_snapshots keyed by a stable UUID rather than by name.
+    """
     if not records:
         print("No startup records to upsert.")
-        return 0
+        return []
 
     url = f"{SUPABASE_URL}/rest/v1/startups"
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json",
-        # Upsert on the unique company_name column; update the row if it already exists
-        "Prefer": "resolution=merge-duplicates,return=minimal",
+        # Upsert on the unique company_name column; update the row if it already exists.
+        # return=representation gives back the full upserted rows (incl. id) instead of nothing.
+        "Prefer": "resolution=merge-duplicates,return=representation",
     }
     params = {"on_conflict": "company_name"}
 
@@ -41,7 +46,8 @@ def upsert_startups(records):
             "funding_stage": r.get("funding_stage"),
             "funding_amount": r.get("funding_amount"),
             "funding_amount_usd": r.get("funding_amount_usd"),
-            "signal_score": r.get("signal_score"),
+            "momentum_score": r.get("momentum_score"),
+            "data_confidence": r.get("data_confidence"),
             "investors": r.get("investors"),
             "contact_email": r.get("contact_email"),
             "hiring_status": r.get("hiring_status"),
@@ -51,13 +57,49 @@ def upsert_startups(records):
         })
 
     if not cleaned:
-        return 0
+        return []
 
     resp = requests.post(url, headers=headers, params=params, json=cleaned, timeout=30)
     if resp.status_code not in (200, 201, 204):
         print(f"[error] Supabase upsert failed: {resp.status_code} {resp.text}")
         resp.raise_for_status()
-    return len(cleaned)
+
+    try:
+        return resp.json()
+    except ValueError:
+        return []
+
+
+def write_snapshots(upserted_rows):
+    """One company_snapshots row per upserted startup -- the raw material for a
+    momentum trajectory over time. See RADAR_SCORE_SPEC.md."""
+    rows = [
+        {
+            "startup_id": r["id"],
+            "momentum_score": r.get("momentum_score"),
+            "data_confidence": r.get("data_confidence"),
+        }
+        for r in upserted_rows if r.get("id")
+    ]
+    if not rows:
+        return 0
+
+    url = f"{SUPABASE_URL}/rest/v1/company_snapshots"
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=rows, timeout=30)
+        if resp.status_code not in (200, 201, 204):
+            print(f"[warn] Failed to write company_snapshots: {resp.status_code} {resp.text[:300]}")
+            return 0
+    except Exception as e:
+        print(f"[warn] Failed to write company_snapshots: {e}")
+        return 0
+    return len(rows)
 
 
 def log_run(articles_count, startups_count):
@@ -98,15 +140,21 @@ def main():
     print("Enriching records from company websites + LLM refine pass (phase 2)...")
     records = enrich_all(records, articles)
 
+    print("Scoring records (Intelligence Engine: momentum score + data confidence)...")
+    weights = fetch_weights(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     for r in records:
         r["region"] = classify_region(r.get("location"))
         r["funding_amount_usd"] = parse_funding_usd(r.get("funding_amount"))
-        r["signal_score"] = compute_signal_score(r.get("funding_stage"), r.get("funding_amount_usd"), r.get("investors"))
+        r["momentum_score"] = compute_momentum_score(r, weights)
+        r["data_confidence"] = compute_data_confidence(r)
 
-    written = upsert_startups(records)
-    print(f"Upserted {written} rows into Supabase.")
+    upserted = upsert_startups(records)
+    print(f"Upserted {len(upserted)} rows into Supabase.")
 
-    log_run(len(articles), written)
+    snapshot_count = write_snapshots(upserted)
+    print(f"Wrote {snapshot_count} company_snapshots rows.")
+
+    log_run(len(articles), len(upserted))
 
 
 if __name__ == "__main__":

@@ -21,7 +21,8 @@ alter table startups add column if not exists unique_moat text;
 alter table startups add column if not exists funding_stage text;
 alter table startups add column if not exists funding_amount text;
 alter table startups add column if not exists funding_amount_usd numeric;
-alter table startups add column if not exists signal_score int;
+alter table startups add column if not exists momentum_score int;
+alter table startups add column if not exists data_confidence int;
 alter table startups add column if not exists investors text;
 alter table startups add column if not exists contact_email text;
 alter table startups add column if not exists hiring_status text;
@@ -42,12 +43,48 @@ begin
   if exists (select 1 from information_schema.columns where table_name = 'startups' and column_name = 'domain') then
     alter table startups drop column domain;
   end if;
+  -- Upgrade path from the "signal_score" (1-5 star heuristic) era to the
+  -- "momentum_score" (0-100, configurable weights) era -- see RADAR_SCORE_SPEC.md.
+  if exists (select 1 from information_schema.columns where table_name = 'startups' and column_name = 'signal_score') then
+    update startups set momentum_score = coalesce(momentum_score, signal_score * 20);
+    alter table startups drop column signal_score;
+  end if;
 end $$;
 
 create index if not exists idx_startups_last_updated on startups (last_updated desc);
 create index if not exists idx_startups_industry on startups (industry);
 create index if not exists idx_startups_region on startups (region);
 create index if not exists idx_startups_funding_usd on startups (funding_amount_usd desc nulls last);
+create index if not exists idx_startups_momentum on startups (momentum_score desc nulls last);
+
+-- Configurable Momentum Score weights -- see RADAR_SCORE_SPEC.md. Read once per
+-- scraper run by scraper/scoring.py; falls back to the same defaults in code if
+-- this table is empty/unreachable, so a bad edit here can't break a whole run.
+create table if not exists score_weights (
+  component text primary key,
+  weight numeric not null,
+  updated_at timestamptz default now()
+);
+
+insert into score_weights (component, weight) values
+  ('funding_stage', 0.35),
+  ('funding_amount', 0.30),
+  ('investor_presence', 0.15),
+  ('hiring_signal', 0.20)
+on conflict (component) do nothing;
+
+-- One row per company per run -- this is what makes a momentum trajectory
+-- (e.g. 61 -> 68 -> 73 -> 82 -> 94) possible once enough weeks accumulate.
+-- References startups.id (a stable UUID), not company_name.
+create table if not exists company_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  startup_id uuid not null references startups(id) on delete cascade,
+  momentum_score int,
+  data_confidence int,
+  recorded_at timestamptz default now()
+);
+
+create index if not exists idx_snapshots_startup on company_snapshots (startup_id, recorded_at desc);
 
 -- Track each weekly run so the frontend can show "last scanned" honestly
 create table if not exists scan_log (
@@ -80,6 +117,8 @@ create index if not exists idx_news_feed_fetched on news_feed (fetched_at desc);
 alter table startups enable row level security;
 alter table scan_log enable row level security;
 alter table news_feed enable row level security;
+alter table score_weights enable row level security;
+alter table company_snapshots enable row level security;
 
 drop policy if exists "Public read access" on startups;
 create policy "Public read access" on startups for select using (true);
@@ -89,3 +128,9 @@ create policy "Public read access" on scan_log for select using (true);
 
 drop policy if exists "Public read access" on news_feed;
 create policy "Public read access" on news_feed for select using (true);
+
+drop policy if exists "Public read access" on score_weights;
+create policy "Public read access" on score_weights for select using (true);
+
+drop policy if exists "Public read access" on company_snapshots;
+create policy "Public read access" on company_snapshots for select using (true);

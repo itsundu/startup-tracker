@@ -1,12 +1,18 @@
-# Startup Signal — weekly top-100 startup tracker for terralytixai.com
+# StartupRadar — weekly top-100 startup intelligence tracker for terralytixai.com
 
-An automated pipeline that scans public news/tech feeds weekly, uses Google's free-tier
-Gemini API to pull out structured startup data (industry, location, founding year, founder,
-funding stage/amount, investors, unique moat, contact/hiring signals), stores it in Supabase,
-and displays it on a live top-100 table page you upload once to your site.
+An automated pipeline that scans public news/tech feeds weekly, uses free-tier LLMs to pull out
+structured startup data (industry, location, founding year, founder, funding stage/amount,
+investors, unique moat, contact/hiring signals), computes a transparent **Momentum Score**, stores
+it all in Supabase, and displays it on a live top-100 table page you upload once to your site.
 
 Scope: AI, Technology, FinTech, PropTech, and Real Estate startups, globally, with dedicated
 coverage of the USA, India (including Chennai specifically), and rest-of-world news sources.
+
+**This project was scoped down from a much larger "full startup intelligence platform" spec**
+(licensed data providers, entity resolution, auth/subscriptions, a Next.js/FastAPI rewrite, etc.)
+to what's actually buildable free-tier-only. See `STARTUPRADAR_ARCHITECTURE.md` for the full
+reasoning, `DATA_SOURCE_REGISTRY.md` for every source considered (enabled, deferred, or
+deliberately not built), and `RADAR_SCORE_SPEC.md` for the scoring model.
 
 ## How it works
 
@@ -23,14 +29,18 @@ scraper/main.py                                          scraper/news_job.py
   │                    website, pulls founder LinkedIn /    Supabase "news_feed" table
   │                    contact email / hiring signal via    (upsert by link, pruned after 14 days)
   │                    regex (free), then one batched
-  │                    Gemini call for founder name /
+  │                    LLM call for founder name /
   │                    year founded / unique moat
+  ├─ scoring.py     → Intelligence Engine: momentum_score
+  │                    + data_confidence from configurable
+  │                    score_weights (see RADAR_SCORE_SPEC.md)
         │
         ▼
-Supabase "startups" table (upsert, deduped by company_name)
+Supabase "startups" table (upsert, deduped by company_name, real UUIDs)
         │
+        ├──▶ "company_snapshots" (one row/company/run -- momentum trajectory over time)
         ▼
-frontend/index.html  →  fetches top 100 (by disclosed funding) + the news sidebar,
+frontend/index.html  →  fetches top 100 (by Momentum Score) + the news sidebar,
                          both directly from Supabase client-side
         │
         ▼
@@ -106,20 +116,14 @@ workflow", which is the fastest way to test them end-to-end the first time.
 | Founder LinkedIn | Regex scan of the company's own website | **Often null** — many sites don't link a personal LinkedIn |
 | Contact email | Regex scan for `mailto:`/email patterns on the company's own website | **Often null** — most startups don't publish one |
 | Hiring status | Detects a `/careers` or `/jobs` page, or "we're hiring" language | Best-effort; "Unknown" is common, not a bug |
-| Signal (★) | Rule-based score (1-5) computed in `compute_signal_score()` from funding stage + disclosed amount + whether investors were named | **Not a valuation or a prediction** — see below |
+| Momentum Score (0-100) | Configurable weighted formula in `scraper/scoring.py`, from funding stage + amount + investor presence + hiring signal | **Not a valuation or a prediction** — see `RADAR_SCORE_SPEC.md` |
+| Data Confidence (0-100) | % of 8 key fields that are actually populated | Honest completeness measure, not a "will this company succeed" score |
 
 This is news-driven and website-driven, not a Crunchbase/LinkedIn-grade database — treat it
-as a discovery feed, and spot-check anything before treating it as fact.
-
-### About the "Signal" star rating
-
-There's no free source of real startup valuations, so the Signal column is a transparent,
-rule-based heuristic — not a valuation, and not a claim about which startups will succeed.
-It's computed once per row in `scraper/extractor.py::compute_signal_score()` from three things
-we actually have: funding stage (later stage scores higher), disclosed amount (larger rounds add
-a point), and whether any investor was named (a small bump for early/unstated-stage rows). A
-startup with an unstated funding stage gets the lowest, most conservative score — that reflects
-missing information, not a negative judgment on the company.
+as a discovery feed, and spot-check anything before treating it as fact. See
+`RADAR_SCORE_SPEC.md` for the full Momentum Score formula and what it deliberately does NOT
+claim (no decay, no breakout detection, no peer comparison — all need historical depth this
+project doesn't have yet).
 
 ## Reliability: how production failures are handled
 
@@ -165,9 +169,9 @@ site itself even if a GitHub Actions failure email gets missed.
   directory — those are proprietary aggregated datasets, not public feeds, and scraping a
   competing directory product (or a company's internal database) to republish elsewhere is a
   different thing entirely from reading public press RSS.
-- **"Top 100"**: the frontend shows the top 100 rows ranked by disclosed funding amount
-  (highest first, undisclosed-amount rows sorted by recency). It is not a verified,
-  authoritative ranking — it's what the pipeline has found and can rank so far.
+- **"Top 100"**: the frontend shows the top 100 rows ranked by Momentum Score (funding amount,
+  then recency, as tiebreakers). It is not a verified, authoritative ranking — it's what the
+  pipeline has found and can score/rank so far.
 - **Free tier**: Gemini's free tier has rate limits (requests/minute and requests/day). One
   weekly run comfortably fits within it even with the two-phase extraction + enrichment.
 - **Adding sources**: to add a new feed (e.g. a regional tech blog, an accelerator's news
@@ -200,14 +204,20 @@ site itself even if a GitHub Actions failure email gets missed.
 
 ## Files
 
+- `STARTUPRADAR_ARCHITECTURE.md` — current architecture, what was scoped out and why, phase plan
+- `DATA_SOURCE_REGISTRY.md` — every source considered: enabled, deferred (free but not built yet),
+  or deliberately not built (requires a paid license)
+- `RADAR_SCORE_SPEC.md` — the Momentum Score formula, components, and what it doesn't claim
 - `supabase_schema.sql` — run once in Supabase (upgrade-safe)
-- `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world)
+- `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world, YC blog)
 - `scraper/gemini_client.py` — Gemini API client with self-healing model/version discovery
 - `scraper/groq_client.py` — Groq API client, used only as a fallback (see Reliability above)
 - `scraper/llm.py` — tries Gemini then Groq for every LLM call; extractor.py/enrich.py use this
-- `scraper/extractor.py` — phase 1: LLM extraction + region/funding-amount/signal-score parsing
-- `scraper/enrich.py` — phase 2: company-website discovery + regex parsing + LLM refine pass
-- `scraper/main.py` — orchestrates the weekly run, upserts into `startups`, fails loud on total outage
+- `scraper/extractor.py` — Data Engine, phase 1: LLM extraction + region/funding-amount parsing
+- `scraper/enrich.py` — Data Engine, phase 2: company-website discovery + regex + LLM refine pass
+- `scraper/scoring.py` — Intelligence Engine: momentum_score + data_confidence from `score_weights`
+- `scraper/main.py` — orchestrates the weekly run, upserts into `startups`, writes
+  `company_snapshots`, fails loud on total outage
 - `scraper/news_job.py` — orchestrates the daily headline refresh into `news_feed` (no LLM)
 - `.github/workflows/weekly.yml` — free weekly scheduler for the startup table
 - `.github/workflows/daily_news.yml` — free daily scheduler for the news sidebar
