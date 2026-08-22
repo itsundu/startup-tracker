@@ -31,16 +31,23 @@ FinTech, PropTech, and Real Estate startups across USA, India (incl. Chennai), a
    which reuses `sources.py` but skips the LLM entirely — it just upserts raw headlines into the
    `news_feed` table (deduped by `link`, pruned after 14 days) for the site's news sidebar. This is
    why it can run daily while the main pipeline stays weekly: no Gemini cost, just headlines.
-7. `frontend/index.html` is a single static page that queries Supabase directly client-side for the
-   top 100 `startups` rows (by disclosed funding) and the `news_feed` sidebar — it is uploaded once
-   and never needs re-uploading. It also has a dark/light theme toggle (CSS vars + `localStorage`,
-   defaults to dark) and reads `scan_log` to show "Last scan: <date>", flagging the status dot red
-   if the most recent run is more than `STALE_AFTER_DAYS` (10) old.
+7. `frontend/index.html` is a single static page, light-by-default with a dark/light toggle
+   (CSS vars + `localStorage`), that queries Supabase directly client-side for the top 100
+   `startups` rows (by disclosed funding, with region/industry/stage/investor/founded-year/hiring
+   filters) and the `news_feed` sidebar — it is uploaded once and never needs re-uploading. It
+   reads `scan_log` to show "Last scan: <date>", flagging the status dot red if the most recent
+   run is more than `STALE_AFTER_DAYS` (10) old. Header/table/footer share a consistent amber
+   accent-border brand treatment defined via the theme-aware CSS custom properties in `:root`
+   (light) / `html[data-theme="dark"]`.
 
-When asked to debug a failed/empty run: check `scraper/llm.py` and `scraper/gemini_client.py` first
-— most production failures here have been Google renaming/retiring a Gemini model. The self-healing
-logic should catch that automatically now; if a run still fails loud (nonzero exit from `main.py`),
-read the actual log for which provider(s) failed and why before changing anything.
+When asked to debug a failed/empty run: check `scraper/llm.py`, `scraper/gemini_client.py`, and
+`scraper/groq_client.py` first — production failures here have all been either a provider
+renaming/retiring a model, or (once) Groq's discovery picking an unsuitably small model whose
+free-tier token budget couldn't fit the batch (413). The self-healing logic in both clients should
+catch these automatically now; if a run still fails loud (nonzero exit from `main.py`), read the
+actual log for which provider(s) failed and why before changing anything. If it's a 413/token-limit
+issue, prefer shrinking `batch_size` (`extract_startups()` / `_refine_with_llm()`) or the `_enrich_one`
+about-text truncation over just picking a different model.
 
 When asked to add a source: follow the pattern of `fetch_rss_sources` / `fetch_hn_funding_stories`
 in `scraper/sources.py` and register it in `SOURCE_FUNCS`.

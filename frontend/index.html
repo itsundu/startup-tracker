@@ -11,46 +11,55 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:        #0B1120;
-    --bg-panel:  #101A2C;
-    --line:      #1E2A3A;
-    --ink:       #EDEAE3;
-    --ink-dim:   #8B97A8;
-    --amber:     #F2A93B;
-    --amber-ink: #1a1204;
-    --teal:      #3FB6A8;
-    --shadow:    0 1px 2px rgba(0,0,0,.4);
-    --radius:    10px;
+    --bg:         #F7F6F2;
+    --bg-panel:   #FFFFFF;
+    --bg-alt:     #FAFAF7;
+    --line:       #E4E1D8;
+    --ink:        #1B2130;
+    --ink-dim:    #6B7280;
+    --amber:      #B4720E;
+    --amber-ink:  #FFF7EA;
+    --teal:       #1B8C7D;
+    --shadow:     0 1px 2px rgba(16,24,40,.04), 0 1px 6px rgba(16,24,40,.05);
+    --radius:     12px;
+    --radius-sm:  8px;
   }
-  html[data-theme="light"]{
-    --bg:        #F6F4EF;
-    --bg-panel:  #FFFFFF;
-    --line:      #E3DFD5;
-    --ink:       #1B2130;
-    --ink-dim:   #6B7280;
-    --amber:     #B4720E;
-    --amber-ink: #FFF7EA;
-    --teal:      #1B8C7D;
-    --shadow:    0 1px 2px rgba(20,20,10,.06);
+  html[data-theme="dark"]{
+    --bg:         #0B1120;
+    --bg-panel:   #101A2C;
+    --bg-alt:     #0E1626;
+    --line:       #1E2A3A;
+    --ink:        #EDEAE3;
+    --ink-dim:    #8B97A8;
+    --amber:      #F2A93B;
+    --amber-ink:  #1a1204;
+    --teal:       #3FB6A8;
+    --shadow:     0 1px 2px rgba(0,0,0,.4);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:var(--bg);
     color:var(--ink);
-    font-family:'IBM Plex Mono', monospace;
+    font-family:'Space Grotesk', sans-serif;
     min-height:100vh;
     transition:background .15s ease, color .15s ease;
   }
-  .wrap{max-width:1280px;margin:0 auto;padding:28px 20px 64px;}
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .wrap{max-width:1280px;margin:0 auto;padding:24px 20px 64px;}
 
   /* Top bar */
-  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:8px;}
-  .brand{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;letter-spacing:-0.01em;}
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    border-bottom:3px solid var(--amber);
+    padding:14px 20px;margin-bottom:28px;box-shadow:var(--shadow);
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-0.01em;}
   .brand span{color:var(--amber);}
-  .brand-logo{height:30px;width:auto;display:none;}
+  .brand-logo{height:28px;width:auto;display:none;}
+  html:not([data-theme="dark"]) .brand-logo.logo-light{display:block;}
   html[data-theme="dark"] .brand-logo.logo-dark{display:block;}
-  html[data-theme="light"] .brand-logo.logo-light{display:block;}
   .topbar-right{display:flex;align-items:center;gap:14px;}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(63,182,168,.6);animation:pulse 2s infinite;}
@@ -69,57 +78,61 @@
   .theme-toggle:hover{border-color:var(--amber);}
 
   /* Hero */
-  .hero{margin:18px 0 28px;max-width:840px;}
+  .hero{margin:8px 0 32px;max-width:860px;}
   .hero h1{
-    font-family:'Space Grotesk',sans-serif;
     font-weight:700;
-    font-size:clamp(24px,3.4vw,36px);
+    font-size:clamp(26px,3.6vw,38px);
     line-height:1.2;
-    letter-spacing:-0.01em;
-    margin:0 0 12px;
+    letter-spacing:-0.015em;
+    margin:0 0 14px;
   }
   .hero p{
     color:var(--ink-dim);
-    font-size:13.5px;
-    line-height:1.75;
+    font-size:14.5px;
+    line-height:1.8;
     margin:0;
   }
 
   /* Ticker */
   .ticker-outer{
-    border-top:1px solid var(--line);
-    border-bottom:1px solid var(--line);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
     overflow:hidden;
     white-space:nowrap;
     position:relative;
-    margin-bottom:26px;
+    margin-bottom:24px;
     background:var(--bg-panel);
+    box-shadow:var(--shadow);
   }
   .ticker-track{
     display:inline-block;
-    padding:10px 0;
+    padding:11px 0;
     animation:scroll 32s linear infinite;
   }
-  .ticker-track span{margin-right:40px;font-size:13px;color:var(--ink-dim);}
-  .ticker-track b{color:var(--amber);font-weight:600;}
+  .ticker-track span{margin-right:40px;font-size:13px;color:var(--ink-dim);font-family:'IBM Plex Mono',monospace;}
+  .ticker-track b{color:var(--amber);font-weight:600;font-family:'Space Grotesk',sans-serif;}
   @keyframes scroll{
     0%{transform:translateX(0);}
     100%{transform:translateX(-50%);}
   }
 
   /* Controls */
-  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;}
+  .controls{
+    display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;box-shadow:var(--shadow);
+  }
   .controls input, .controls select{
-    background:var(--bg-panel);
+    background:var(--bg-alt);
     border:1px solid var(--line);
     color:var(--ink);
-    font-family:'IBM Plex Mono',monospace;
-    font-size:13px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13.5px;
     padding:9px 12px;
-    border-radius:var(--radius);
+    border-radius:var(--radius-sm);
     outline:none;
   }
-  .controls input{flex:1;min-width:200px;}
+  .controls input{flex:1;min-width:220px;}
   .controls input:focus, .controls select:focus{border-color:var(--amber);}
 
   /* Two-column layout: table + news sidebar */
@@ -131,28 +144,33 @@
   table{width:100%;border-collapse:collapse;font-size:13px;}
   thead th{
     text-align:left;
-    font-family:'Space Grotesk',sans-serif;
     font-weight:600;
     font-size:11px;
     letter-spacing:.06em;
     text-transform:uppercase;
     color:var(--ink-dim);
-    background:var(--bg-panel);
-    padding:12px 14px;
-    border-bottom:1px solid var(--line);
+    background:var(--bg-alt);
+    padding:13px 16px;
+    border-bottom:2px solid var(--amber);
     cursor:pointer;
     white-space:nowrap;
   }
   thead th:hover{color:var(--amber);}
   tbody td{
-    padding:12px 14px;
+    padding:12px 16px;
     border-bottom:1px solid var(--line);
     vertical-align:top;
     color:var(--ink);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
   }
+  tbody tr:nth-child(even){background:var(--bg-alt);}
   tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:rgba(242,169,59,0.06);}
-  .company{font-weight:600;font-family:'Space Grotesk',sans-serif;}
+  tbody tr:hover{background:rgba(180,114,14,0.07);}
+  html[data-theme="dark"] tbody tr:hover{background:rgba(242,169,59,0.06);}
+  .company{font-weight:600;font-family:'Space Grotesk',sans-serif;font-size:13.5px;}
+  .ext-link{margin-left:6px;color:var(--ink-dim);text-decoration:none;font-size:12px;}
+  .ext-link:hover{color:var(--amber);}
   .badge-new{
     display:inline-block;margin-left:8px;font-size:9px;font-family:'Space Grotesk',sans-serif;
     background:var(--amber);color:var(--amber-ink);padding:1px 6px;border-radius:4px;font-weight:700;
@@ -186,6 +204,16 @@
   .news-item:hover .news-title{color:var(--amber);}
   .news-meta{font-size:10.5px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.03em;}
 
+  /* Footer */
+  .site-footer{
+    margin-top:32px;padding:18px 20px;text-align:center;
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    border-top:3px solid var(--amber);box-shadow:var(--shadow);
+    font-size:12.5px;color:var(--ink-dim);
+  }
+  .site-footer a{color:var(--teal);text-decoration:none;font-weight:600;}
+  .site-footer a:hover{text-decoration:underline;}
+
   @media (max-width:900px){
     .layout{grid-template-columns:1fr;}
     .sidebar-card{position:static;}
@@ -196,7 +224,7 @@
     table, tbody, tr, td{display:block;width:100%;}
     tbody tr{border-bottom:1px solid var(--line);padding:10px 0;}
     tbody td{border-bottom:none;padding:4px 14px;}
-    tbody td:before{content:attr(data-label);display:block;font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+    tbody td:before{content:attr(data-label);display:block;font-family:'Space Grotesk',sans-serif;font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
   }
 </style>
 </head>
@@ -234,6 +262,8 @@
         <select id="filter-region"><option value="">All regions</option></select>
         <select id="filter-industry"><option value="">All industries</option></select>
         <select id="filter-stage"><option value="">All stages</option></select>
+        <select id="filter-investor"><option value="">All investors</option></select>
+        <select id="filter-founded"><option value="">Founded: any year</option></select>
         <select id="filter-hiring"><option value="">Hiring: any</option></select>
       </div>
 
@@ -275,10 +305,14 @@
     </aside>
   </div>
 
+  <footer class="site-footer">
+    Designed by <a href="https://www.SundarDesignStudio.com" target="_blank" rel="noopener">www.SundarDesignStudio.com</a>
+  </footer>
+
 </div>
 
 <script>
-  // ---- Theme (dark default, persisted per-visitor) ----
+  // ---- Theme (light default, persisted per-visitor) ----
   function applyTheme(theme){
     document.documentElement.setAttribute("data-theme", theme);
     const btn = document.getElementById("theme-toggle");
@@ -288,7 +322,7 @@
   (function initTheme(){
     let stored = null;
     try{ stored = localStorage.getItem("startup-radar-theme"); }catch(e){}
-    const theme = stored || "dark";
+    const theme = stored || "light";
     applyTheme(theme);
   })();
   document.getElementById("theme-toggle").addEventListener("click", ()=>{
@@ -333,15 +367,24 @@
     return `${days}d ago`;
   }
 
+  function splitInvestors(text){
+    if(!text) return [];
+    return text.split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+  }
+
   function populateFilters(rows){
     const regionSel = document.getElementById("filter-region");
     const industrySel = document.getElementById("filter-industry");
     const stageSel = document.getElementById("filter-stage");
+    const investorSel = document.getElementById("filter-investor");
+    const foundedSel = document.getElementById("filter-founded");
     const hiringSel = document.getElementById("filter-hiring");
 
     const regions = [...new Set(rows.map(r=>r.region).filter(Boolean))].sort();
     const industries = [...new Set(rows.map(r=>r.industry).filter(Boolean))].sort();
     const stages = [...new Set(rows.map(r=>r.funding_stage).filter(Boolean))].sort();
+    const investors = [...new Set(rows.flatMap(r=>splitInvestors(r.investors)))].sort();
+    const foundedYears = [...new Set(rows.map(r=>r.year_founded).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
 
     regions.forEach(s=>{
       const o = document.createElement("option"); o.value=s; o.textContent=s;
@@ -354,6 +397,14 @@
     stages.forEach(s=>{
       const o = document.createElement("option"); o.value=s; o.textContent=s;
       stageSel.appendChild(o);
+    });
+    investors.forEach(s=>{
+      const o = document.createElement("option"); o.value=s; o.textContent=s;
+      investorSel.appendChild(o);
+    });
+    foundedYears.forEach(s=>{
+      const o = document.createElement("option"); o.value=s; o.textContent=s;
+      foundedSel.appendChild(o);
     });
     [["Likely hiring","Likely hiring"]].forEach(([v,label])=>{
       const o = document.createElement("option"); o.value=v; o.textContent=label;
@@ -392,12 +443,16 @@
     const region = document.getElementById("filter-region").value;
     const industry = document.getElementById("filter-industry").value;
     const stage = document.getElementById("filter-stage").value;
+    const investor = document.getElementById("filter-investor").value;
+    const founded = document.getElementById("filter-founded").value;
     const hiring = document.getElementById("filter-hiring").value;
 
     let rows = allRows.filter(r=>{
       if(region && r.region !== region) return false;
       if(industry && r.industry !== industry) return false;
       if(stage && r.funding_stage !== stage) return false;
+      if(investor && !splitInvestors(r.investors).includes(investor)) return false;
+      if(founded && r.year_founded !== founded) return false;
       if(hiring && r.hiring_status !== hiring) return false;
       if(q){
         const hay = [r.company_name, r.business_idea, r.unique_moat, r.investors, r.location, r.founder_name].join(" ").toLowerCase();
@@ -425,7 +480,7 @@
 
     body.innerHTML = rows.map(r => `
       <tr>
-        <td data-label="Company"><span class="company">${escapeHtml(r.company_name)}</span>${isRecent(r.last_updated) ? '<span class="badge-new">NEW</span>' : ''}</td>
+        <td data-label="Company"><span class="company">${escapeHtml(r.company_name)}</span>${isRecent(r.last_updated) ? '<span class="badge-new">NEW</span>' : ''}${r.homepage ? `<a class="ext-link" href="${r.homepage}" target="_blank" rel="noopener" title="Company website">↗ site</a>` : ''}</td>
         <td data-label="Region">${escapeHtml(r.region) || '<span class="muted">—</span>'}</td>
         <td data-label="Location">${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
         <td data-label="Founded">${escapeHtml(r.year_founded) || '<span class="muted">—</span>'}</td>
@@ -525,6 +580,8 @@
   document.getElementById("filter-region").addEventListener("change", renderTable);
   document.getElementById("filter-industry").addEventListener("change", renderTable);
   document.getElementById("filter-stage").addEventListener("change", renderTable);
+  document.getElementById("filter-investor").addEventListener("change", renderTable);
+  document.getElementById("filter-founded").addEventListener("change", renderTable);
   document.getElementById("filter-hiring").addEventListener("change", renderTable);
   document.querySelectorAll("thead th").forEach(th=>{
     th.addEventListener("click", ()=>{

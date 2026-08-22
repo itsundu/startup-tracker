@@ -131,7 +131,7 @@ def _enrich_one(company_name, source_url, rss_summary_html):
         "founder_linkedin": _find_linkedin(combined),
         "contact_email": _find_email(combined),
         "hiring_status": _find_hiring(combined.lower(), homepage),
-        "about_text": _strip_tags(combined)[:3000],
+        "about_text": _strip_tags(combined)[:2000],
     }
 
 
@@ -149,10 +149,10 @@ Never invent facts not present in the given text. Return ONLY a JSON array, same
 one object per company, no markdown fences."""
 
 
-def _refine_with_llm(records, batch_size=8):
+def _refine_with_llm(records, batch_size=6):
     for i in range(0, len(records), batch_size):
         if i > 0:
-            time.sleep(2.5)  # spacing between batch calls -- free-tier RPM limits are easy to trip
+            time.sleep(4)  # spacing between batch calls -- free-tier RPM limits are easy to trip
 
         batch = records[i:i + batch_size]
         lines = []

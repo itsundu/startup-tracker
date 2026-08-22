@@ -25,6 +25,12 @@ RSS_FEEDS = [
     ("TechCrunch - Venture", "https://techcrunch.com/category/venture/feed/"),
     ("VentureBeat", "https://venturebeat.com/feed/"),
     ("Fast Company - Tech", "https://www.fastcompany.com/technology/rss"),
+    # Y Combinator's own public blog -- NOT a scrape of the structured /companies
+    # directory (that's a proprietary dataset, not a public feed). This is press-style
+    # content, filtered by the same "is this actually a startup" LLM step as every
+    # other source; YC partner/policy posts get discarded the same way irrelevant
+    # items from other feeds already do.
+    ("Y Combinator Blog", "https://www.ycombinator.com/blog/rss"),
     # India (incl. Chennai coverage)
     ("YourStory", "https://yourstory.com/feed"),
     ("Inc42", "https://inc42.com/feed/"),

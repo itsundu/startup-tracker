@@ -15,7 +15,7 @@ import time
 from gemini_client import clean_json
 from llm import call_llm
 
-PACING_SECONDS = 2.5  # spacing between batch calls -- free-tier RPM limits are easy to trip otherwise
+PACING_SECONDS = 4  # spacing between batch calls -- free-tier RPM limits are easy to trip otherwise
 
 SYSTEM_PROMPT = """You extract structured data about startup companies from news snippets.
 
@@ -44,7 +44,7 @@ If no snippet in the batch qualifies, return an empty array: []
 """
 
 
-def extract_startups(articles, batch_size=12):
+def extract_startups(articles, batch_size=8):
     """articles: list of {title, summary, link, published, source_name}
 
     Returns (results, batch_count, failed_batch_count). failed_batch_count counts

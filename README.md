@@ -131,14 +131,19 @@ from under it), so three layers guard against it recurring silently:
    model-listing endpoint what's actually callable, and re-discovers if a call 404s.
    Gemini's client additionally tries both the `v1beta` and `v1` API versions, and — if a
    404 response names a replacement model ("...use models/X instead") — switches straight
-   to it. This alone fixes most future renames automatically, with no code change needed
-   (this has already happened twice on Gemini and once on Groq in production).
+   to it. Groq's discovery also excludes narrow/regional/audio models (it once picked a
+   small Arabic-language model with a tiny free-tier token budget, which 413'd on every
+   call) and prefers larger general-purpose chat models; a 413 is treated the same as a
+   404 — try a different model, don't just retry the same oversized request. This alone
+   fixes most future renames/bad-picks automatically, with no code change needed (this has
+   already happened three times in production: twice on Gemini, once on Groq).
 2. **Cross-provider fallback** (`scraper/llm.py`): every extraction/enrichment call tries
    Gemini first; if Gemini fails outright for that call (bad key, exhausted quota, every
    model 404ing, rate-limited past its retry budget), it automatically retries through Groq
    instead. Real redundancy against a full Gemini outage, not just a naming issue. There's
-   also a small pacing delay (~2.5s) between batch calls in both phases, since free-tier
-   per-minute rate limits are easy to trip when batches fire back-to-back.
+   also a pacing delay (4s) between batch calls in both phases, and batch sizes are kept
+   modest (8 articles / 6 companies per call), since free-tier per-minute rate limits and
+   token budgets are easy to trip when batches fire back-to-back or run too large.
 3. **Fail loud instead of silently succeeding** (`scraper/main.py`): if literally every
    extraction batch fails on *both* providers, the job raises and exits non-zero — GitHub
    Actions marks the run red and (by default) emails the repo owner. Previously a total
@@ -154,8 +159,12 @@ site itself even if a GitHub Actions failure email gets missed.
 ## Notes and honest limitations
 
 - **Data quality**: pulls from public news (TechCrunch, VentureBeat, Fast Company, YourStory,
-  Inc42, Entrackr, EU-Startups, Silicon Canals, Tech in Asia, Hacker News). It will not catch
-  every startup that raises money globally — only ones that got press coverage.
+  Inc42, Entrackr, EU-Startups, Silicon Canals, Tech in Asia, Y Combinator's own blog, Hacker
+  News). It will not catch every startup that raises money globally — only ones that got press
+  coverage. Deliberately does **not** scrape topstartups.io or YC's structured `/companies`
+  directory — those are proprietary aggregated datasets, not public feeds, and scraping a
+  competing directory product (or a company's internal database) to republish elsewhere is a
+  different thing entirely from reading public press RSS.
 - **"Top 100"**: the frontend shows the top 100 rows ranked by disclosed funding amount
   (highest first, undisclosed-amount rows sorted by recency). It is not a verified,
   authoritative ranking — it's what the pipeline has found and can rank so far.
@@ -170,12 +179,22 @@ site itself even if a GitHub Actions failure email gets missed.
   and can't run this job. The separate Anthropic API is metered pay-per-token — an option
   worth considering later for extraction quality, but not a free-tier fit like Gemini/Groq.
 
-## The frontend: theme + news sidebar
+## The frontend: design, filters, theme + news sidebar
 
-- **Dark / light toggle**: the sun/moon button in the top bar switches themes instantly;
-  the choice is remembered per-visitor via `localStorage` (falls back to dark on first visit
-  or if storage is blocked). The logo swaps automatically too: `frontend/images/StartupRadar_logo_white_noBG.png`
-  in dark mode, `frontend/images/StartupRadar_logo_blue_noBG.png` in light mode.
+- **Design**: a clean, light-by-default layout — sans-serif (Space Grotesk) for all UI chrome
+  (nav, hero, controls, labels), monospace (IBM Plex Mono) reserved for data-dense areas (table
+  cells, the ticker) where fixed-width alignment actually helps readability. Nav bar, filter
+  toolbar, table, and news panel are all styled as consistent cards with the same radius/shadow.
+- **Dark / light toggle**: the sun/moon button in the top bar switches themes instantly (light
+  is the default); the choice is remembered per-visitor via `localStorage`. The logo swaps
+  automatically too: `frontend/images/StartupRadar_logo_blue_noBG.png` in light mode,
+  `frontend/images/StartupRadar_logo_white_noBG.png` in dark mode.
+- **Filters**: region, industry, funding stage, **investor** (parsed from the comma-separated
+  `investors` field), **founded year**, and hiring status — plus free-text search and click-to-sort
+  on every column. The investor/founded-year filters and the inline company-website link (using
+  the `homepage` field already collected by `enrich.py`, but not previously shown anywhere) were
+  added after comparing against topstartups.io's field/filter set — its own data-sourcing
+  methodology isn't publicly documented, but its field structure was a useful reference point.
 - **News sidebar**: reads the `news_feed` table (populated daily, see above) and shows the
   latest ~20 headlines with source + relative time, independent of the weekly startup table.
 
