@@ -10,6 +10,27 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
 
+def deduplicate_by_company(records):
+    """The same company can legitimately get extracted more than once in a single run (e.g.
+    covered by both TechCrunch and Hacker News in the same week). Postgres's
+    ON CONFLICT DO UPDATE can't affect the same target row twice within one upsert command,
+    so sending two rows with the same company_name in one batch 500s the whole upsert. Dedupe
+    here, before enrichment even runs, so we don't waste enrichment work on the duplicate
+    either. Keeps whichever record has the longer business_idea, as a simple proxy for
+    "the richer extraction" when two exist.
+    """
+    best_by_name = {}
+    for r in records:
+        name = (r.get("company_name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        existing = best_by_name.get(key)
+        if existing is None or len(r.get("business_idea") or "") > len(existing.get("business_idea") or ""):
+            best_by_name[key] = r
+    return list(best_by_name.values())
+
+
 def upsert_startups(records):
     """Upserts into `startups` and returns the upserted rows (with their real `id`s),
     so callers can write company_snapshots keyed by a stable UUID rather than by name.
@@ -136,6 +157,9 @@ def main():
             "red, and you get notified -- instead of silently upserting nothing. Check API keys/quota "
             "for both providers."
         )
+
+    records = deduplicate_by_company(records)
+    print(f"Deduplicated to {len(records)} unique companies.")
 
     print("Enriching records from company websites + LLM refine pass (phase 2)...")
     records = enrich_all(records, articles)
