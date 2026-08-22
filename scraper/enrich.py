@@ -2,11 +2,19 @@
 Phase 2: for each candidate startup from phase 1, try to find its own website
 and pull founder / contact / hiring signals from it.
 
+The per-company website discovery/scan runs concurrently across companies
+(ThreadPoolExecutor -- pure network I/O, no shared state) with a trimmed
+number of fetch attempts per company. A previous sequential, un-trimmed
+version of this could take close to two hours on a run with 100+ candidates
+(each company doing up to ~5 sequential HTTP fetches at a 10s timeout).
+
 Email, LinkedIn, and hiring-page detection are done with plain regex against
 fetched pages -- free, no LLM tokens spent. Founder name, year founded, and a
 one-line "unique moat" summary need judgement, so those go through one batched
 LLM call (Gemini primary, Groq fallback -- see llm.py) across all enriched
-companies.
+companies -- that part stays sequential/paced (see PACING_SECONDS in
+extractor.py and the sleep in _refine_with_llm below) to respect free-tier
+rate limits, unlike the website-fetching step above.
 
 Many startups simply don't publish a public email or LinkedIn link anywhere,
 even on their own site -- those fields will legitimately stay null, and that's
@@ -17,11 +25,21 @@ import json
 import re
 import time
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 from gemini_client import clean_json
 from llm import call_llm
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; StartupTrackerBot/1.0)"}
+
+# The per-company website discovery/scan below is pure network I/O (no LLM calls), so it's
+# safe and a huge win to parallelize with threads -- this used to run one company at a time,
+# with up to ~5 sequential HTTP fetches each (10s timeout apiece), which is exactly why a run
+# with 100+ candidate startups could take close to two hours. Running these concurrently is
+# the single biggest lever; trimming the fetch count per company (below) is the second.
+MAX_ENRICH_WORKERS = 10
+FETCH_TIMEOUT = 6
+GUESS_TIMEOUT = 4
 
 DENYLIST_DOMAINS = {
     "twitter.com", "x.com", "linkedin.com", "facebook.com", "instagram.com",
@@ -54,7 +72,7 @@ def _extract_candidate_links(html):
     return candidates
 
 
-def _fetch(url, timeout=10):
+def _fetch(url, timeout=FETCH_TIMEOUT):
     if not url:
         return None
     try:
@@ -67,18 +85,23 @@ def _fetch(url, timeout=10):
 
 
 def _guess_homepage(company_name, rss_summary_html, article_link):
-    for html in (rss_summary_html, _fetch(article_link)):
-        candidates = _extract_candidate_links(html)
-        if candidates:
-            return candidates[0]
+    candidates = _extract_candidate_links(rss_summary_html)
+    if candidates:
+        return candidates[0]
+
+    # Only fetch the full article page if the RSS summary itself had no usable link --
+    # this is the most expensive path (a full remote page fetch) so avoid it when possible.
+    candidates = _extract_candidate_links(_fetch(article_link))
+    if candidates:
+        return candidates[0]
 
     slug = re.sub(r'[^a-z0-9]', '', (company_name or "").lower())
     if not slug:
         return None
-    for tld in ("com", "io", "ai"):
+    for tld in ("com", "io"):  # .com covers most cases; .ai dropped to save a slow-timeout round trip
         url = f"https://www.{slug}.{tld}"
         try:
-            r = requests.head(url, timeout=6, allow_redirects=True, headers=HEADERS)
+            r = requests.head(url, timeout=GUESS_TIMEOUT, allow_redirects=True, headers=HEADERS)
             if r.status_code < 400:
                 return url
         except Exception:
@@ -102,9 +125,9 @@ def _find_email(html):
 def _find_hiring(combined_text_lower, homepage):
     if any(k in combined_text_lower for k in HIRING_KEYWORDS):
         return "Likely hiring"
-    for path in ("/careers", "/jobs"):
-        if _fetch(homepage.rstrip("/") + path):
-            return "Likely hiring"
+    # Just one extra fetch (not /careers AND /jobs) -- keeps this a cheap best-effort check.
+    if _fetch(homepage.rstrip("/") + "/careers"):
+        return "Likely hiring"
     return "Unknown"
 
 
@@ -122,8 +145,9 @@ def _enrich_one(company_name, source_url, rss_summary_html):
                 "hiring_status": "Unknown", "about_text": ""}
 
     home_html = _fetch(homepage) or ""
-    about_html = _fetch(homepage.rstrip("/") + "/about") or _fetch(homepage.rstrip("/") + "/about-us") or ""
-    team_html = _fetch(homepage.rstrip("/") + "/team") or ""
+    about_html = _fetch(homepage.rstrip("/") + "/about") or ""
+    # Team page is a fallback source, not a default fetch -- only bother if /about had nothing.
+    team_html = _fetch(homepage.rstrip("/") + "/team") or "" if not about_html else ""
     combined = " ".join([home_html, about_html, team_html])
 
     return {
@@ -181,18 +205,25 @@ def _refine_with_llm(records, batch_size=6):
             r["unique_moat"] = extra.get("unique_moat")
 
 
+def _enrich_record(article_by_link, r):
+    art = article_by_link.get(r.get("source_url"))
+    summary_html = art["summary"] if art else ""
+    info = _enrich_one(r.get("company_name"), r.get("source_url"), summary_html)
+    r["homepage"] = info["homepage"]
+    r["founder_linkedin"] = info["founder_linkedin"]
+    r["contact_email"] = info["contact_email"]
+    r["hiring_status"] = info["hiring_status"]
+    r["_about_text"] = info["about_text"]
+    return r
+
+
 def enrich_all(records, articles):
     article_by_link = {a["link"]: a for a in articles if a.get("link")}
 
-    for r in records:
-        art = article_by_link.get(r.get("source_url"))
-        summary_html = art["summary"] if art else ""
-        info = _enrich_one(r.get("company_name"), r.get("source_url"), summary_html)
-        r["homepage"] = info["homepage"]
-        r["founder_linkedin"] = info["founder_linkedin"]
-        r["contact_email"] = info["contact_email"]
-        r["hiring_status"] = info["hiring_status"]
-        r["_about_text"] = info["about_text"]
+    # Pure network I/O, no shared state between companies -- safe and a big win to run
+    # concurrently (threads, since this is I/O-bound: the GIL releases during each request).
+    with ThreadPoolExecutor(max_workers=MAX_ENRICH_WORKERS) as pool:
+        records = list(pool.map(lambda r: _enrich_record(article_by_link, r), records))
 
     _refine_with_llm(records)
 

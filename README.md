@@ -155,6 +155,16 @@ from under it), so three layers guard against it recurring silently:
    but legitimately finds zero qualifying startups is *not* treated as a failure — only a
    batch where the LLM never returned usable output counts against this.
 
+## Run time
+
+The website-enrichment step (`scraper/enrich.py`, phase 2) runs company website
+lookups **concurrently** (`ThreadPoolExecutor`, 10 workers) rather than one at a time, and
+does fewer fetch attempts per company than it used to. A run with 100+ candidate startups
+used to take close to two hours — nearly all of it sequential HTTP fetching of individual
+company websites, several per company, each with a 10s timeout, run one company after
+another. If a future change to `enrich.py` reintroduces a fully sequential loop over
+companies, expect run time to blow back up the same way.
+
 On top of that, the frontend shows **"Last scan: <date>"** read from the `scan_log` table
 (not just the newest row in `startups`), and turns the status dot red with a "data may be
 stale" note if the most recent run is more than 10 days old — so staleness is visible on the

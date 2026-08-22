@@ -30,7 +30,11 @@ FinTech, PropTech, and Real Estate startups across USA, India (incl. Chennai), a
 4. `scraper/enrich.py` (phase 2, still Data Engine) finds each startup's own website (from links
    in the article, or a name-guessing fallback), regex-scans it for a LinkedIn profile / contact
    email / hiring signal (free, no LLM), then makes one batched `call_llm()` call across all
-   companies to fill in founder name, year founded, and a one-line "unique moat".
+   companies to fill in founder name, year founded, and a one-line "unique moat". **The per-company
+   website scan runs concurrently** (`ThreadPoolExecutor`, `MAX_ENRICH_WORKERS=10`) — a sequential
+   version of this once made the whole run take close to two hours (100+ companies × up to 5
+   sequential fetches × 10s timeout). Keep it concurrent; only the LLM refine call after it stays
+   sequential/paced (rate-limit safety).
 5. **Intelligence Engine.** `scraper/scoring.py` computes `momentum_score` (0-100) and
    `data_confidence` (0-100) per record from `compute_momentum_score()` / `compute_data_confidence()`,
    using weights read from Supabase's `score_weights` table (`fetch_weights()`, falls back to
