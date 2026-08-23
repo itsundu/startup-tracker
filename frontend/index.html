@@ -11,33 +11,36 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:         #F7F6F2;
+    /* Matches src/app/globals.css light-mode tokens in the main
+       terralytixAI Next.js app, so this page reads as part of the
+       same product rather than a separate style. */
+    --bg:         #F6F7FB;
     --bg-panel:   #FFFFFF;
-    --bg-alt:     #FAFAF7;
-    --line:       #E4E1D8;
-    --ink:        #1B2130;
-    --ink-dim:    #6B7280;
-    --amber:      #B4720E;
+    --bg-alt:     #EEF0F6;
+    --line:       rgba(15,17,32,0.09);
+    --ink:        #0F1120;
+    --ink-dim:    #5B6482;
+    --amber:      #B7791F;
     --amber-ink:  #FFF7EA;
-    --teal:       #1B8C7D;
-    --teal-tint:  rgba(27,140,125,.12);
-    --amber-tint: rgba(180,114,14,.12);
+    --teal:       #0F9D78;
+    --teal-tint:  rgba(15,157,120,.12);
+    --amber-tint: rgba(183,121,31,.12);
     --shadow:     0 1px 2px rgba(16,24,40,.04), 0 1px 6px rgba(16,24,40,.05);
     --radius:     12px;
     --radius-sm:  8px;
   }
   html[data-theme="dark"]{
-    --bg:         #0B1120;
-    --bg-panel:   #101A2C;
-    --bg-alt:     #0E1626;
-    --line:       #1E2A3A;
-    --ink:        #EDEAE3;
-    --ink-dim:    #8B97A8;
-    --amber:      #F2A93B;
+    --bg:         #090B12;
+    --bg-panel:   #0E1220;
+    --bg-alt:     #131A2C;
+    --line:       rgba(255,255,255,0.08);
+    --ink:        #EEF1F8;
+    --ink-dim:    #8B93AC;
+    --amber:      #E0AC4F;
     --amber-ink:  #1a1204;
-    --teal:       #3FB6A8;
-    --teal-tint:  rgba(63,182,168,.15);
-    --amber-tint: rgba(242,169,59,.15);
+    --teal:       #1FD6A3;
+    --teal-tint:  rgba(31,214,163,.15);
+    --amber-tint: rgba(224,172,79,.15);
     --shadow:     0 1px 2px rgba(0,0,0,.4);
   }
   *{box-sizing:border-box;}
@@ -66,12 +69,12 @@
   html[data-theme="dark"] .brand-logo.logo-dark{display:block;}
   .topbar-right{display:flex;align-items:center;gap:14px;}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(63,182,168,.6);animation:pulse 2s infinite;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(31,214,163,.6);animation:pulse 2s infinite;}
   .dot-stale{background:#D9534F;animation:none;box-shadow:none;}
   @keyframes pulse{
-    0%{box-shadow:0 0 0 0 rgba(63,182,168,.55);}
-    70%{box-shadow:0 0 0 8px rgba(63,182,168,0);}
-    100%{box-shadow:0 0 0 0 rgba(63,182,168,0);}
+    0%{box-shadow:0 0 0 0 rgba(31,214,163,.55);}
+    70%{box-shadow:0 0 0 8px rgba(31,214,163,0);}
+    100%{box-shadow:0 0 0 0 rgba(31,214,163,0);}
   }
   .theme-toggle{
     width:32px;height:32px;border-radius:50%;
@@ -170,8 +173,8 @@
   }
   tbody tr:nth-child(even){background:var(--bg-alt);}
   tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:rgba(180,114,14,0.07);}
-  html[data-theme="dark"] tbody tr:hover{background:rgba(242,169,59,0.06);}
+  tbody tr:hover{background:rgba(183,121,31,0.07);}
+  html[data-theme="dark"] tbody tr:hover{background:rgba(224,172,79,0.06);}
   .company{font-weight:600;font-family:'Space Grotesk',sans-serif;font-size:13.5px;}
   .ext-link{margin-left:6px;color:var(--ink-dim);text-decoration:none;font-size:12px;}
   .ext-link:hover{color:var(--amber);}
