@@ -84,6 +84,10 @@
   }
   .theme-toggle:hover{border-color:var(--amber);}
 
+  .subsidiary-link{font-size:12px;color:var(--ink-dim);white-space:nowrap;}
+  .subsidiary-link a{color:var(--teal);text-decoration:none;font-weight:600;}
+  .subsidiary-link a:hover{text-decoration:underline;}
+
   /* Hero */
   .hero{margin:8px 0 32px;max-width:860px;}
   .hero h1{
@@ -261,6 +265,7 @@
   }
   .site-footer a{color:var(--teal);text-decoration:none;font-weight:600;}
   .site-footer a:hover{text-decoration:underline;}
+  .site-footer div + div{margin-top:4px;}
 
   @media (max-width:900px){
     .layout{grid-template-columns:1fr;}
@@ -290,6 +295,7 @@
       STARTUP <span>RADAR</span>
     </div>
     <div class="topbar-right">
+      <span class="subsidiary-link">A subsidiary of <a href="https://terralytixai.com" target="_blank" rel="noopener">TERRALYTIX</a></span>
       <div class="status"><span class="dot"></span><span id="last-updated">Loading last scan…</span></div>
       <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle dark/light theme">🌙</button>
     </div>
@@ -378,7 +384,8 @@
   </div>
 
   <footer class="site-footer">
-    Site designed &amp; maintained by <a href="https://www.SundarDesignStudio.com" target="_blank" rel="noopener">www.SundarDesignStudio.com</a>
+    <div>Startup Radar is a subsidiary of <a href="https://terralytixai.com" target="_blank" rel="noopener">TERRALYTIX</a></div>
+    <div>Site designed &amp; maintained by <a href="https://www.SundarDesignStudio.com" target="_blank" rel="noopener">www.SundarDesignStudio.com</a></div>
   </footer>
 
 </div>
