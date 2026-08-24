@@ -142,6 +142,27 @@
   .controls input{flex:1;min-width:220px;}
   .controls input:focus, .controls select:focus{border-color:var(--amber);}
 
+  /* Distribution charts */
+  .charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px;}
+  .chart-card{
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;box-shadow:var(--shadow);
+  }
+  .chart-card h3{
+    font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);
+    margin:0 0 14px;
+  }
+  .bar-chart{display:flex;flex-direction:column;gap:6px;}
+  .bar-row{display:grid;grid-template-columns:96px 1fr 28px;align-items:center;gap:10px;}
+  .bar-label{
+    font-size:11.5px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .bar-track{background:var(--bg-alt);border-radius:999px;height:12px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:999px;min-width:3px;transition:width .3s ease;}
+  .bar-value{font-size:11.5px;text-align:right;color:var(--ink);font-family:'IBM Plex Mono',monospace;}
+  .chart-empty{padding:16px 4px;text-align:center;font-size:12px;color:var(--ink-dim);}
+
   /* Two-column layout: table + news sidebar */
   .layout{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;}
   .main-col{min-width:0;}
@@ -196,6 +217,22 @@
   .momentum-badge.signal-low{background:var(--bg-alt);color:var(--ink-dim);}
   .empty, .loading{padding:60px 20px;text-align:center;color:var(--ink-dim);}
 
+  /* Pagination */
+  .pagination{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+    padding:12px 16px;border-top:1px solid var(--line);
+  }
+  .page-info{font-size:12px;color:var(--ink-dim);}
+  .page-controls{display:flex;align-items:center;gap:12px;}
+  .page-btn{
+    background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);
+    font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;
+    padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;
+  }
+  .page-btn:hover:not(:disabled){border-color:var(--amber);color:var(--amber);}
+  .page-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .page-current{font-size:12px;color:var(--ink-dim);}
+
   /* News sidebar */
   .sidebar-card{
     border:1px solid var(--line);border-radius:var(--radius);
@@ -228,6 +265,10 @@
   @media (max-width:900px){
     .layout{grid-template-columns:1fr;}
     .sidebar-card{position:static;}
+  }
+
+  @media (max-width:700px){
+    .charts-grid{grid-template-columns:1fr;}
   }
 
   @media (max-width:700px){
@@ -278,6 +319,25 @@
         <select id="filter-hiring"><option value="">Hiring: any</option></select>
       </div>
 
+      <section class="charts-grid" id="charts-grid">
+        <div class="chart-card">
+          <h3>By Industry</h3>
+          <div class="bar-chart" id="chart-industry"></div>
+        </div>
+        <div class="chart-card">
+          <h3>By Funding Stage</h3>
+          <div class="bar-chart" id="chart-stage"></div>
+        </div>
+        <div class="chart-card">
+          <h3>By Hiring Status</h3>
+          <div class="bar-chart" id="chart-hiring"></div>
+        </div>
+        <div class="chart-card">
+          <h3>By Momentum Tier</h3>
+          <div class="bar-chart" id="chart-momentum"></div>
+        </div>
+      </section>
+
       <main class="table-outer">
         <table id="startup-table">
           <thead>
@@ -303,6 +363,7 @@
             <tr><td colspan="15" class="loading">Loading startups…</td></tr>
           </tbody>
         </table>
+        <div class="pagination" id="pagination"></div>
       </main>
 
     </div>
@@ -353,6 +414,8 @@
   let allRows = [];
   let sortKey = "momentum_score";
   let sortDir = -1;
+  let currentPage = 1;
+  const PAGE_SIZE = 20;
 
   function fmtDate(d){
     if(!d) return "";
@@ -449,6 +512,101 @@
     return String(str).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
   }
 
+  // ---- Distribution charts ----
+  // Single series (no natural category order) -> one color per chart, never a
+  // rainbow per bar. Long tails fold into "Other" past MAX_BARS rows.
+  function computeDistribution(rows, key, maxBars = 7){
+    const counts = new Map();
+    rows.forEach(r=>{
+      const v = r[key] || "Unknown";
+      counts.set(v, (counts.get(v) || 0) + 1);
+    });
+    let entries = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
+    if(entries.length > maxBars){
+      const head = entries.slice(0, maxBars - 1);
+      const tailCount = entries.slice(maxBars - 1).reduce((s,[,c])=>s+c, 0);
+      entries = [...head, ["Other", tailCount]];
+    }
+    return entries;
+  }
+
+  // Momentum tiers are ordered (Low < Mid < High), so they reuse the same
+  // teal/amber/gray tiering already used by the momentum badge in the table.
+  function computeMomentumDistribution(rows){
+    let low = 0, mid = 0, high = 0, unscored = 0;
+    rows.forEach(r=>{
+      const s = r.momentum_score;
+      if(s === null || s === undefined) unscored++;
+      else if(s >= 70) high++;
+      else if(s >= 40) mid++;
+      else low++;
+    });
+    const entries = [["High (70–100)", high], ["Mid (40–69)", mid], ["Low (0–39)", low]];
+    if(unscored > 0) entries.push(["Unscored", unscored]);
+    return entries;
+  }
+
+  function momentumColor(label){
+    if(label.startsWith("High")) return "var(--teal)";
+    if(label.startsWith("Mid")) return "var(--amber)";
+    return "var(--ink-dim)";
+  }
+
+  function renderBarChart(containerId, entries, colorFn){
+    const el = document.getElementById(containerId);
+    const total = entries.reduce((s,[,c])=>s+c, 0);
+    if(total === 0){
+      el.innerHTML = `<div class="chart-empty">No data yet</div>`;
+      return;
+    }
+    const max = Math.max(...entries.map(([,c])=>c));
+    el.innerHTML = entries.map(([label, count])=>{
+      const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+      const color = colorFn ? colorFn(label) : "var(--teal)";
+      return `
+        <div class="bar-row" title="${escapeHtml(label)}: ${count} startup${count === 1 ? '' : 's'}">
+          <div class="bar-label">${escapeHtml(label)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
+          <div class="bar-value">${count}</div>
+        </div>`;
+    }).join("");
+  }
+
+  function renderCharts(rows){
+    renderBarChart("chart-industry", computeDistribution(rows, "industry"));
+    renderBarChart("chart-stage", computeDistribution(rows, "funding_stage"));
+    renderBarChart("chart-hiring", computeDistribution(rows, "hiring_status"));
+    renderBarChart("chart-momentum", computeMomentumDistribution(rows), momentumColor);
+  }
+
+  // ---- Pagination ----
+  function renderPagination(totalItems, totalPages){
+    const el = document.getElementById("pagination");
+    if(totalItems === 0){ el.innerHTML = ""; return; }
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end = Math.min(currentPage * PAGE_SIZE, totalItems);
+    el.innerHTML = `
+      <span class="page-info">Showing ${start}–${end} of ${totalItems}</span>
+      <div class="page-controls">
+        <button class="page-btn" id="page-prev" ${currentPage <= 1 ? 'disabled' : ''}>‹ Prev</button>
+        <span class="page-current mono">Page ${currentPage} of ${totalPages}</span>
+        <button class="page-btn" id="page-next" ${currentPage >= totalPages ? 'disabled' : ''}>Next ›</button>
+      </div>`;
+    const prevBtn = document.getElementById("page-prev");
+    const nextBtn = document.getElementById("page-next");
+    if(prevBtn) prevBtn.addEventListener("click", ()=>{
+      if(currentPage > 1){ currentPage--; renderTable(); scrollToTableTop(); }
+    });
+    if(nextBtn) nextBtn.addEventListener("click", ()=>{
+      if(currentPage < totalPages){ currentPage++; renderTable(); scrollToTableTop(); }
+    });
+  }
+
+  function scrollToTableTop(){
+    const outer = document.querySelector(".table-outer");
+    if(outer) outer.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function renderTable(){
     const q = document.getElementById("search").value.toLowerCase();
     const region = document.getElementById("filter-region").value;
@@ -484,13 +642,22 @@
       return av.localeCompare(bv) * sortDir;
     });
 
+    renderCharts(rows);
+
     const body = document.getElementById("table-body");
     if(rows.length === 0){
       body.innerHTML = `<tr><td colspan="15" class="empty">No startups match these filters yet.</td></tr>`;
+      renderPagination(0, 1);
       return;
     }
 
-    body.innerHTML = rows.map(r => `
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if(currentPage > totalPages) currentPage = totalPages;
+    const pageStart = (currentPage - 1) * PAGE_SIZE;
+    const pageRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
+    renderPagination(rows.length, totalPages);
+
+    body.innerHTML = pageRows.map(r => `
       <tr>
         <td data-label="Company"><span class="company">${escapeHtml(r.company_name)}</span>${isRecent(r.last_updated) ? '<span class="badge-new">NEW</span>' : ''}${r.homepage ? `<a class="ext-link" href="${r.homepage}" target="_blank" rel="noopener" title="Company website">↗ site</a>` : ''}</td>
         <td data-label="Region">${escapeHtml(r.region) || '<span class="muted">—</span>'}</td>
@@ -589,17 +756,20 @@
     `).join("");
   }
 
-  document.getElementById("search").addEventListener("input", renderTable);
-  document.getElementById("filter-region").addEventListener("change", renderTable);
-  document.getElementById("filter-industry").addEventListener("change", renderTable);
-  document.getElementById("filter-stage").addEventListener("change", renderTable);
-  document.getElementById("filter-investor").addEventListener("change", renderTable);
-  document.getElementById("filter-founded").addEventListener("change", renderTable);
-  document.getElementById("filter-hiring").addEventListener("change", renderTable);
+  function resetPageAndRender(){ currentPage = 1; renderTable(); }
+
+  document.getElementById("search").addEventListener("input", resetPageAndRender);
+  document.getElementById("filter-region").addEventListener("change", resetPageAndRender);
+  document.getElementById("filter-industry").addEventListener("change", resetPageAndRender);
+  document.getElementById("filter-stage").addEventListener("change", resetPageAndRender);
+  document.getElementById("filter-investor").addEventListener("change", resetPageAndRender);
+  document.getElementById("filter-founded").addEventListener("change", resetPageAndRender);
+  document.getElementById("filter-hiring").addEventListener("change", resetPageAndRender);
   document.querySelectorAll("thead th").forEach(th=>{
     th.addEventListener("click", ()=>{
       const key = th.dataset.key;
       if(sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+      currentPage = 1;
       renderTable();
     });
   });

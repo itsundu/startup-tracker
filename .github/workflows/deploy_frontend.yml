@@ -1,0 +1,33 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+  workflow_dispatch: {}   # lets you trigger a redeploy manually from the Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      # Uploads frontend/index.html + frontend/images/ over SSH/SFTP to the
+      # web host, replacing the manual FTP/cPanel upload described in the README.
+      #
+      # Auth: uses a private key by default (recommended). If your host only
+      # supports password auth, delete the `key:` line below and add
+      # `password: ${{ secrets.SFTP_PASSWORD }}` instead.
+      - name: Upload frontend via SFTP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SFTP_HOST }}
+          port: ${{ secrets.SFTP_PORT }}
+          username: ${{ secrets.SFTP_USERNAME }}
+          key: ${{ secrets.SFTP_PRIVATE_KEY }}
+          source: "frontend/*"
+          target: ${{ secrets.SFTP_REMOTE_PATH }}
+          strip_components: 1
+          overwrite: true

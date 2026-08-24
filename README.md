@@ -98,10 +98,23 @@ workflow", which is the fastest way to test them end-to-end the first time.
    const SUPABASE_URL = "https://xxxxx.supabase.co";
    const SUPABASE_ANON_KEY = "eyJ...";      // the anon public key, NOT service_role
    ```
-2. Upload `frontend/index.html` **and** the `frontend/images/` folder together via FTP/cPanel
-   to wherever `www.terralytixai.com/startups` should point (e.g. `startups/index.html` and
-   `startups/images/...`) — the logo files are referenced with a relative `images/` path, so
-   they need to keep sitting next to the HTML file.
+2. `.github/workflows/deploy_frontend.yml` auto-deploys `frontend/index.html` and
+   `frontend/images/` over SFTP any time a push to `main` touches `frontend/**` — no manual
+   FTP upload needed. One-time setup, in repo → Settings → Secrets and variables → Actions:
+   - Generate a dedicated SSH keypair for CI (don't reuse your personal one), e.g.
+     `ssh-keygen -t ed25519 -f deploy_key -C "startup-tracker-ci"`.
+   - Add the **public** key (`deploy_key.pub`) to your host's SSH authorized keys (in cPanel:
+     Security → SSH Access → Manage SSH Keys → Import Key, then Authorize).
+   - Add repo secrets:
+     - `SFTP_HOST` — your host's SSH/SFTP hostname
+     - `SFTP_PORT` — usually `22`
+     - `SFTP_USERNAME` — the cPanel/SSH username
+     - `SFTP_PRIVATE_KEY` — contents of the **private** key (`deploy_key`)
+     - `SFTP_REMOTE_PATH` — target directory, e.g. `/home/<user>/public_html/startups`
+   - If your host only supports password auth instead of SSH keys, edit the workflow to swap
+     `key: ${{ secrets.SFTP_PRIVATE_KEY }}` for `password: ${{ secrets.SFTP_PASSWORD }}`.
+   - You can also trigger a redeploy anytime from the Actions tab → "Deploy Frontend" →
+     "Run workflow", without needing a new commit.
 3. Done — visit the page any time and it'll show whatever is currently in the table.
 
 ## What gets extracted, and how reliable each field is
@@ -231,4 +244,6 @@ site itself even if a GitHub Actions failure email gets missed.
 - `scraper/news_job.py` — orchestrates the daily headline refresh into `news_feed` (no LLM)
 - `.github/workflows/weekly.yml` — free weekly scheduler for the startup table
 - `.github/workflows/daily_news.yml` — free daily scheduler for the news sidebar
-- `frontend/index.html` — the page you upload to your site
+- `.github/workflows/deploy_frontend.yml` — auto-deploys `frontend/` to terralytixai.com over
+  SFTP on every push to `main` that touches it
+- `frontend/index.html` — the page that gets deployed to your site
