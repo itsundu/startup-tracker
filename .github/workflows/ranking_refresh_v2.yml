@@ -1,0 +1,104 @@
+name: Ranking Refresh v2 (manual test)
+
+# Deliberately workflow_dispatch ONLY -- no schedule trigger. This runs the
+# new company+events pipeline (scraper/main_v2.py) against your REAL
+# Gemini/Groq/Supabase secrets so you can inspect a real quality report and
+# a handful of ranked companies before deciding to point the scheduled
+# "Ranking Refresh" workflow at main_v2.py instead of main.py. See
+# MIGRATION.md for the checklist to go through before that switch.
+#
+# Requires supabase_migration_v2.sql to have been applied first (the new
+# tables must exist) -- main_v2.py will fail loudly against a 404/relation-
+# does-not-exist error otherwise, which is the correct failure mode (better
+# than silently doing nothing).
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: ranking-refresh-v2
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan_v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Run scraper (v2 pipeline)
+        id: run_scraper_v2
+        working-directory: scraper
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python main_v2.py | tee run_output.log
+
+      - name: Extract sanitized quality report from run output
+        if: always()
+        working-directory: scraper
+        run: |
+          python - <<'PYEOF'
+          import json, re
+
+          try:
+              with open("run_output.log", encoding="utf-8") as f:
+                  log = f.read()
+          except FileNotFoundError:
+              log = ""
+
+          # main_v2.py prints "Run complete. should_publish=... (...)" and
+          # "Regional counts: {...}" -- the full structured report itself is
+          # written to scan_runs.quality_report in Supabase (service-role
+          # only, never exposed publicly). This step only surfaces the
+          # human-readable summary lines into the job artifact/summary; it
+          # does not print secrets, prompts, or article text.
+          lines = [l for l in log.splitlines() if l.startswith(("Run complete.", "Regional counts:", "[warn]"))]
+          with open("run_summary.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) or "(no summary lines captured -- check the full job log)")
+          PYEOF
+
+      - name: Upload run summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-refresh-v2-summary
+          path: scraper/run_summary.txt
+          retention-days: 14
+
+      - name: Write run summary
+        if: always()
+        run: |
+          {
+            echo "### Ranking refresh v2 (manual test) — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "- Result: ${{ steps.run_scraper_v2.outcome }}"
+            echo ""
+            if [ -f scraper/run_summary.txt ]; then
+              echo '```'
+              cat scraper/run_summary.txt
+              echo '```'
+            fi
+            echo ""
+            echo "Full quality report was written to the \`scan_runs\` table (service-role"
+            echo "access only). Query it from the Supabase SQL editor:"
+            echo '```sql'
+            echo "select finished_at, run_status, regional_result_counts, quality_report"
+            echo "from scan_runs order by started_at desc limit 1;"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
