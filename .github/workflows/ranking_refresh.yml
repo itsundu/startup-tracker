@@ -6,8 +6,7 @@ on:
   workflow_dispatch: {}       # lets you trigger it manually from the Actions tab
 
 # Prevents two ranking runs from overlapping (e.g. a manual dispatch firing
-# while the scheduled run is still in progress) -- a v1 upsert racing itself
-# is exactly the kind of thing that produces confusing partial-write bugs.
+# while the scheduled run is still in progress).
 concurrency:
   group: ranking-refresh
   cancel-in-progress: false
@@ -33,7 +32,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r scraper/requirements.txt
 
-      - name: Run scraper (v1 pipeline)
+      # v2 pipeline: verified homepage/careers resolution, entity resolution,
+      # source tiering, recency-decayed + stage-adjusted regional ranking,
+      # and a quality-gated publish step (see RANKING_METHODOLOGY.md).
+      # Requires supabase_migration_v2.sql to already be applied. The
+      # frontend deployed to terralytixai.com still reads v1's `startups`
+      # table (frontend/index.html) until MIGRATION.md's Step 3 cutover --
+      # this workflow change only affects what scraper/main_v2.py writes to
+      # the NEW tables (companies/company_events/etc.), so the live site is
+      # unaffected by this change on its own.
+      - name: Run scraper (v2 pipeline)
         id: run_scraper
         working-directory: scraper
         env:
@@ -41,7 +49,37 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python main.py
+        run: python main_v2.py | tee run_output.log
+        continue-on-error: true   # so the summary step below still runs and reports outcome even on a quality-gate decline (exit 1)
+
+      - name: Fail the job if the scraper step failed
+        if: steps.run_scraper.outcome == 'failure'
+        run: exit 1
+
+      - name: Extract sanitized run summary
+        if: always()
+        working-directory: scraper
+        run: |
+          python - <<'PYEOF'
+          try:
+              with open("run_output.log", encoding="utf-8") as f:
+                  log = f.read()
+          except FileNotFoundError:
+              log = ""
+          # Only the human-readable summary lines main_v2.py prints -- never
+          # article text, prompts, or secret values.
+          lines = [l for l in log.splitlines() if l.startswith(("Run complete.", "Regional counts:", "[warn]", "[error]"))]
+          with open("run_summary.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) or "(no summary lines captured -- check the full job log)")
+          PYEOF
+
+      - name: Upload run summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-refresh-summary
+          path: scraper/run_summary.txt
+          retention-days: 30
 
       - name: Write run summary
         if: always()
@@ -49,12 +87,18 @@ jobs:
           {
             echo "### Ranking refresh — $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo ""
-            echo "- Pipeline: v1 (\`scraper/main.py\`)"
+            echo "- Pipeline: v2 (\`scraper/main_v2.py\`)"
             echo "- Result: ${{ steps.run_scraper.outcome }}"
             echo ""
-            echo "_Note: this workflow still runs the v1 pipeline. The v2 pipeline"
-            echo "(\`scraper/main_v2.py\`, richer verification + regional ranking + a"
-            echo "quality report) is available for manual testing via the separate"
-            echo "\"Ranking Refresh v2 (manual test)\" workflow -- see MIGRATION.md"
-            echo "before switching this scheduled workflow over to it._"
+            if [ -f scraper/run_summary.txt ]; then
+              echo '```'
+              cat scraper/run_summary.txt
+              echo '```'
+            fi
+            echo ""
+            echo "Full quality report: query \`scan_runs\` (service-role only) in the Supabase SQL editor:"
+            echo '```sql'
+            echo "select finished_at, run_status, regional_result_counts, quality_report"
+            echo "from scan_runs order by started_at desc limit 1;"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

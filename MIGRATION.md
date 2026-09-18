@@ -1,3 +1,12 @@
+> **Current status of this repo:** Step 1 (database migration) and Step 4 (scheduled workflow
+> now runs `main_v2.py`) below are **done**. Step 3 (frontend cutover) has **not** happened yet —
+> `frontend/index.html` still reads v1's `startups` table, deliberately, until the v2 pipeline has
+> a few successful scheduled runs to look at. `ranking_refresh_v2.yml` (the originally-documented
+> manual-test-only workflow) was removed once the schedule switched over to it, since
+> `ranking_refresh.yml` already supports `workflow_dispatch` for on-demand runs — keeping both
+> would have meant two workflows doing the same job, the same duplication problem this migration
+> already fixed once for the old dueling deploy workflows.
+
 # Migrating to StartupRadar v2
 
 This is the exact sequence for moving from the v1 pipeline (`scraper/main.py`, the `startups`
@@ -64,21 +73,24 @@ alter table company_snapshots drop column if exists data_completeness;
 `startups`, the pre-existing `company_snapshots` rows/columns, and `scan_log` are all still
 exactly as they were.
 
-## Step 2 — Test the v2 pipeline manually (does not affect production)
+## Step 2 — Verify the v2 pipeline's results (does not affect production)
 
-1. In GitHub → Actions → "Ranking Refresh v2 (manual test)" → **Run workflow**. This calls
-   `scraper/main_v2.py` against your real secrets, but only writes to the *new* tables — it never
-   touches `startups`, so v1/the live site are still unaffected even while this runs.
-2. Watch the run. It should finish with a step summary showing `should_publish=True` (or `False`
-   with a clear reason — see "Reading a failed run" below).
-3. Query the result:
+In this repo, the scheduled workflow already runs `main_v2.py` (see the status note above), so
+this step is about **checking** its runs rather than triggering a one-off test — though you can
+still force an extra run anytime via GitHub → Actions → "Ranking Refresh" → **Run workflow**
+(`workflow_dispatch` works independent of the Mon/Wed/Fri schedule). Either way, it only writes to
+the *new* tables — it never touches `startups`, so v1/the live site are unaffected regardless.
+
+1. After a scheduled or manual run, check its step summary. It should show `should_publish=True`
+   (or `False` with a clear reason — see "Reading a failed run" below).
+2. Query the result:
    ```sql
    select region_bucket, count(*) from v_regional_rankings group by 1;
    select * from scan_runs order by started_at desc limit 1;
    ```
-4. Repeat this a few times over a week or two (it's `workflow_dispatch`-only — it won't run on a
-   schedule until you do Step 4) until you're comfortable with the quality of what it's finding.
-   Every run's quality report is preserved in `scan_runs.quality_report` for comparison.
+3. Check back after each of the next few scheduled runs (Mon/Wed/Fri) until you're comfortable
+   with the quality of what it's finding. Every run's quality report is preserved in
+   `scan_runs.quality_report` for comparison across runs.
 
 ### Reading a failed/low-quality run
 
@@ -103,16 +115,20 @@ Pushing this to `main` triggers `deploy_frontend.yml` as usual and deploys the n
 uploads whatever is at `frontend/index.html` plus `frontend/images/`) as an easy rollback: to
 revert, just swap the two filenames back and push again.
 
-## Step 4 — Switch the scheduled ranking refresh to v2
+## Step 4 — Switch the scheduled ranking refresh to v2 (**done** in this repo)
 
-Only after Steps 2–3 have been running smoothly:
+`.github/workflows/ranking_refresh.yml` already runs `scraper/main_v2.py` on the Monday/Wednesday/
+Friday 06:00 UTC schedule — this step was done ahead of Step 3 in this repo's actual history (a
+deliberate choice: it only affects the new tables, not the live site, so there's no reason to wait
+for the frontend cutover first). The workflow exits non-zero (shows red, notifies the repo owner)
+whenever a run's quality report fails the launch thresholds, per "fail when quality thresholds are
+breached" — that is a *quality-gate decline*, not a crash: all the run's safe writes (field-level
+verification, `scan_runs`, the quality report) still happened; it just means `regional_rank`/
+`momentum_score` weren't overwritten with a worse result. Check the run's step summary or
+`scan_runs.quality_report.threshold_failures` before assuming something is broken.
 
-1. Edit `.github/workflows/ranking_refresh.yml`: change `run: python main.py` to
-   `run: python main_v2.py`.
-2. Optionally delete `.github/workflows/ranking_refresh_v2.yml` at this point (its job is done), or
-   keep it around as a manual re-test tool.
-3. Commit and push. The Monday/Wednesday/Friday 06:00 UTC schedule is unchanged — only which script
-   it runs changes.
+If you ever want to revert this specific step without touching anything else, edit
+`ranking_refresh.yml`'s `run:` line back to `python main.py`.
 
 ## Step 5 — Retire v1 (optional, do this later, not as part of the cutover)
 

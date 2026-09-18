@@ -511,8 +511,22 @@ def process_run(now=None):
               f"Field-level company data (homepage, hiring, description, ...) was still verified "
               f"and updated where upsert_rules allowed it.")
 
-    return report
+    return report, should_publish
 
 
 if __name__ == "__main__":
-    process_run()
+    import sys
+
+    _report, _should_publish = process_run()
+    if not _should_publish:
+        # The run itself completed safely (all writes above already happened
+        # -- field-level verification, scan_runs, the quality report) and
+        # deliberately did NOT overwrite the published ranking. Exiting
+        # non-zero here is a SEPARATE decision: it makes GitHub Actions mark
+        # this run red and notify the repo owner, per "fail when quality
+        # thresholds are breached" -- a quality-gate decline is worth a
+        # human looking at scan_runs.quality_report, even though it isn't a
+        # crash.
+        print("[error] Quality thresholds were not met -- see the reason above and "
+              "scan_runs.quality_report for detail. Exiting non-zero so this run is flagged.")
+        sys.exit(1)

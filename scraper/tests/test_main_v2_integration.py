@@ -126,7 +126,7 @@ def test_process_run_end_to_end_with_mocked_io(monkeypatch):
     monkeypatch.setattr(main_v2, "extract_startups_v2", lambda articles: (FAKE_CLAIMS, 1, 0, 0))
     monkeypatch.setattr(main_v2, "enrich_all", _fake_enrich_all)
 
-    report = main_v2.process_run(now=datetime(2026, 2, 21, tzinfo=timezone.utc))
+    report, should_publish = main_v2.process_run(now=datetime(2026, 2, 21, tzinfo=timezone.utc))
 
     # Two new companies should have been created.
     assert len(fake_db.companies) == 2
@@ -154,6 +154,7 @@ def test_process_run_end_to_end_with_mocked_io(monkeypatch):
     # Quality report shape sanity.
     assert report.score_version == "v2"
     assert isinstance(report.qualified_company_count_by_region, dict)
+    assert isinstance(should_publish, bool)
 
     # scan_runs was created and finalized.
     assert len(fake_db.scan_runs) == 1

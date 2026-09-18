@@ -10,18 +10,18 @@ coverage of the USA, India (including Chennai specifically), and rest-of-world n
 
 ## Two pipeline versions currently in this repo
 
-- **v1** (`scraper/main.py`, the `startups` table, `frontend/index.html`) — what's live today,
-  still what the scheduled `ranking_refresh.yml` workflow runs. One mutable row per company, a
-  single global top-100 list, a 4-component score. See `RADAR_SCORE_SPEC.md`.
+- **v1** (`scraper/main.py`, the `startups` table, `frontend/index.html`) — what's live on
+  **terralytixai.com today**. One mutable row per company, a single global top-100 list, a
+  4-component score. See `RADAR_SCORE_SPEC.md`.
 - **v2** (`scraper/main_v2.py`, the `companies`/`company_events` model, `frontend/index_v2.html`) —
   a company-plus-events data model with verified homepage/careers-page resolution, entity
   resolution (no more name-only duplicates), source tiering, a recency-decayed and stage-adjusted
   7-component score, and three **independently ranked** Top 50 regional lists (US / India / Rest
-  of World) instead of one global Top 100. Not yet wired into the scheduled workflow — see
-  `MIGRATION.md` for the exact cutover sequence, `RANKING_METHODOLOGY.md` for the full scoring
-  model, and `scraper/main_v2.py`'s own docstring for what's been unit/integration-tested (240+
-  tests, every I/O boundary mocked) versus what still needs a live dry run against real
-  Gemini/Groq/Supabase credentials before you point the schedule at it.
+  of World) instead of one global Top 100. **This is now what the scheduled `ranking_refresh.yml`
+  workflow runs** (Mon/Wed/Fri 06:00 UTC), writing into the new tables only — the live site
+  (`frontend/index.html`) still reads v1's `startups` table and is unaffected, deliberately, until
+  the frontend cutover in `MIGRATION.md`'s Step 3 happens. See `RANKING_METHODOLOGY.md` for the
+  full scoring model and `MIGRATION.md` for exactly what's done vs. pending in this repo right now.
 
 **This project was scoped down from a much larger "full startup intelligence platform" spec**
 (licensed data providers, auth/subscriptions, a Next.js/FastAPI rewrite, etc.) to what's actually
@@ -264,15 +264,16 @@ site itself even if a GitHub Actions failure email gets missed.
 - `scraper/tests/` — 240+ pytest tests covering both the deterministic v2 modules and an end-to-end
   mocked run of `main_v2.py`; run with `pytest scraper/tests/` (see `RUNBOOK.md`)
 
-### v1 (live today)
+### v1 (frontend still live; pipeline no longer scheduled)
 
 - `scraper/extractor.py` / `scraper/enrich.py` / `scraper/scoring.py` / `scraper/main.py` — the
   original Data/Intelligence Engine: LLM extraction, "first link" homepage guessing, momentum
-  score from 4 heuristic components, upserts into `startups`
-- `.github/workflows/ranking_refresh.yml` — scheduled Mon/Wed/Fri 06:00 UTC, runs `main.py`
-- `frontend/index.html` — the page currently deployed to your site
+  score from 4 heuristic components, upserts into `startups`. No longer run by
+  `ranking_refresh.yml` (see v2 below) — trigger manually (Actions → run `main.py` locally, or
+  temporarily edit the workflow's `run:` line) if you need to refresh v1 data.
+- `frontend/index.html` — the page currently deployed to your site; still reads `startups`
 
-### v2 (see `MIGRATION.md` before switching to this)
+### v2 (now what the scheduled workflow runs; frontend cutover still pending — see `MIGRATION.md`)
 
 - `scraper/domain_rules.py` / `scraper/homepage_validator.py` — verified homepage resolution
   (denylists + content-type/redirect validation), replacing "take the first link"
@@ -290,6 +291,8 @@ site itself even if a GitHub Actions failure email gets missed.
 - `scraper/quality_report.py` — sanitized post-run quality report + launch-threshold gating
 - `scraper/extractor_v2.py` / `scraper/enrich_v2.py` / `scraper/supabase_client_v2.py` /
   `scraper/main_v2.py` — the v2 orchestration layer wiring all of the above together
-- `.github/workflows/ranking_refresh_v2.yml` — manual-only (`workflow_dispatch`), for testing v2
-  against real credentials before switching the schedule to it
-- `frontend/index_v2.html` — three independent regional lists, verification UI, methodology modal
+- `.github/workflows/ranking_refresh.yml` — scheduled Mon/Wed/Fri 06:00 UTC, runs `main_v2.py`;
+  exits non-zero (fails the run, visibly, in Actions) whenever a run's quality report misses the
+  launch thresholds, so a quality-gate decline gets noticed, not just silently logged
+- `frontend/index_v2.html` — three independent regional lists, verification UI, methodology modal;
+  not yet deployed — see `MIGRATION.md`'s Step 3

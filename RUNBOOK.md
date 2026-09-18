@@ -8,22 +8,25 @@ numbers mean.
 
 | Secret | Used by | Notes |
 |---|---|---|
-| `GEMINI_API_KEY` | `ranking_refresh.yml`, `ranking_refresh_v2.yml` | Free tier at aistudio.google.com |
+| `GEMINI_API_KEY` | `ranking_refresh.yml` | Free tier at aistudio.google.com |
 | `GROQ_API_KEY` | same | Fallback only; job still runs without it but loses redundancy |
 | `SUPABASE_URL` | all scraper workflows | Your project's REST URL |
 | `SUPABASE_SERVICE_KEY` | all scraper workflows | **Secret** — full write access, GitHub Actions only, never the browser |
 | `SFTP_HOST` / `SFTP_PORT` / `SFTP_USERNAME` / `SFTP_PRIVATE_KEY` / `SFTP_REMOTE_PATH` | `deploy_frontend.yml` | Frontend deploy target |
 | (frontend, hardcoded) `SUPABASE_ANON_KEY` | both frontend files | Public read-only key, safe to expose — see RLS policies in `supabase_schema.sql`/`supabase_migration_v2.sql` |
 
-None of the values above are printed by any workflow. `ranking_refresh_v2.yml`'s artifact upload
+None of the values above are printed by any workflow. `ranking_refresh.yml`'s artifact upload
 contains only human-readable result lines (`Run complete...`, `Regional counts...`) — never
 article text, prompts, or secret values.
 
 ## Running things manually
 
-- **Ranking refresh (v1, live)**: Actions → "Ranking Refresh" → Run workflow.
-- **Ranking refresh (v2, test)**: Actions → "Ranking Refresh v2 (manual test)" → Run workflow.
-  Requires `supabase_migration_v2.sql` to have been applied first.
+- **Ranking refresh (v2, scheduled)**: Actions → "Ranking Refresh" → Run workflow. This is the
+  live scheduled pipeline (`scraper/main_v2.py`) — running it manually just forces an extra run
+  outside the Mon/Wed/Fri schedule. Requires `supabase_migration_v2.sql` to have been applied.
+- **Ranking refresh (v1, no longer scheduled)**: run `python main.py` locally in `scraper/` with
+  the same secrets as env vars, or temporarily edit `ranking_refresh.yml`'s `run:` line back to
+  `python main.py` if you need a v1 refresh again.
 - **News refresh**: Actions → "Daily News Refresh" → Run workflow.
 - **Redeploy frontend without a new commit**: Actions → "Deploy Frontend" → Run workflow.
 - **Run the test suite locally**:
@@ -67,9 +70,10 @@ call `fetch_all_articles()`.
 
 ## Debugging a failed ranking run
 
-1. Check the workflow's step summary first (GitHub Actions run page) — both `ranking_refresh.yml`
-   and `ranking_refresh_v2.yml` write one.
-2. For v2, query the full quality report:
+1. Check the workflow's step summary first (GitHub Actions run page) — `ranking_refresh.yml`
+   writes one every run. A red/failed run there can mean either a crash OR a quality-gate decline
+   (see the file's own comments) — the summary and step 2 below tell you which.
+2. Query the full quality report:
    ```sql
    select finished_at, run_status, regional_result_counts, quality_report
    from scan_runs order by started_at desc limit 5;
