@@ -139,18 +139,13 @@ def resolve_entity(
 
     match = name_matches[0]
 
-    if is_ambiguous_name and not candidate_domain:
-        return ResolutionResult(
-            MatchType.NEEDS_REVIEW,
-            reasons=[
-                f"'{candidate_normalized}' is a common/generic name on the ambiguous-name "
-                "list; a verified domain or alias is required before merging"
-            ],
-        )
-
-    # Single unambiguous name match (or ambiguous name WITH a domain that
-    # simply wasn't recorded on the existing row yet -- still require it to
-    # roughly agree, or corroborating HQ/description similarity).
+    # Single name match. For an ambiguous (common/generic) name, this alone
+    # is NOT sufficient -- domain match was already tried and failed above,
+    # so an ambiguous name reaches here only with strong corroborating
+    # evidence (HQ + description similarity, computed below) or none at
+    # all. The final ambiguous-name gate is applied after computing that
+    # corroboration, not before, so "domain or OTHER STRONG EVIDENCE" (the
+    # product requirement) actually gets evaluated.
     confidence = 60
     reasons = [f"normalized name '{candidate_normalized}' matches exactly one existing company"]
 

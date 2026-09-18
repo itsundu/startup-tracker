@@ -140,7 +140,7 @@ ABANDONED_MARKERS = [
 ]
 VALUATION_MARKERS = [
     "valued at", "valuation of", "valuing the company", "post-money valuation",
-    "pre-money valuation", "worth", "valuation reaches",
+    "pre-money valuation", "worth", "valuation reaches", "valuation",
 ]
 ACQUISITION_MARKERS = [
     "acquired", "acquires", "acquisition of", "to be acquired", "buys",
@@ -152,8 +152,18 @@ TAM_MARKERS = [
 ]
 FUND_SIZE_MARKERS = [
     "fund of", "new fund", "raised a fund", "launches a", "vc fund",
-    "debut fund", "flagship fund",
+    "debut fund", "flagship fund", "million fund", "billion fund",
 ]
+
+
+def _matches_any(text, markers):
+    """Word-boundary matching, NOT a bare substring check -- a plain `in`
+    check on a marker like "new fund" would false-positive inside "new
+    funding" (since "fund" is a literal prefix of "funding"), which
+    previously misclassified a proposed/rumored funding mention as a
+    fund-size statement. `\\b` requires a non-word/start-or-end boundary on
+    both sides of the whole marker phrase."""
+    return any(re.search(r"\b" + re.escape(marker) + r"\b", text) for marker in markers)
 
 
 def classify_funding_statement(evidence_text):
@@ -175,21 +185,21 @@ def classify_funding_statement(evidence_text):
     if not text.strip():
         return "ambiguous"
 
-    if any(m in text for m in VALUATION_MARKERS):
+    if _matches_any(text, VALUATION_MARKERS):
         return "valuation"
-    if any(m in text for m in ACQUISITION_MARKERS):
+    if _matches_any(text, ACQUISITION_MARKERS):
         return "acquisition"
-    if any(m in text for m in TAM_MARKERS):
+    if _matches_any(text, TAM_MARKERS):
         return "tam"
-    if any(m in text for m in FUND_SIZE_MARKERS):
+    if _matches_any(text, FUND_SIZE_MARKERS):
         return "fund_size"
-    if any(m in text for m in ABANDONED_MARKERS):
+    if _matches_any(text, ABANDONED_MARKERS):
         return "abandoned"
-    if any(m in text for m in RUMORED_MARKERS):
+    if _matches_any(text, RUMORED_MARKERS):
         return "rumored"
-    if any(m in text for m in PROPOSED_MARKERS):
+    if _matches_any(text, PROPOSED_MARKERS):
         return "proposed"
-    if any(m in text for m in COMPLETED_MARKERS):
+    if _matches_any(text, COMPLETED_MARKERS):
         return "completed"
     return "ambiguous"
 
