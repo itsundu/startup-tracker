@@ -1,18 +1,33 @@
-# StartupRadar — weekly top-100 startup intelligence tracker for terralytixai.com
+# StartupRadar — startup intelligence tracker for terralytixai.com
 
-An automated pipeline that scans public news/tech feeds weekly, uses free-tier LLMs to pull out
-structured startup data (industry, location, founding year, founder, funding stage/amount,
-investors, unique moat, contact/hiring signals), computes a transparent **Momentum Score**, stores
-it all in Supabase, and displays it on a live top-100 table page you upload once to your site.
+An automated pipeline that scans public news/tech feeds, uses free-tier LLMs as an *extraction
+assistant* (never a factual source) to pull out structured, evidence-linked startup data, computes
+a transparent, versioned **Momentum Score**, stores it all in Supabase, and displays it on a live
+table page you upload once to your site.
 
 Scope: AI, Technology, FinTech, PropTech, and Real Estate startups, globally, with dedicated
 coverage of the USA, India (including Chennai specifically), and rest-of-world news sources.
 
+## Two pipeline versions currently in this repo
+
+- **v1** (`scraper/main.py`, the `startups` table, `frontend/index.html`) — what's live today,
+  still what the scheduled `ranking_refresh.yml` workflow runs. One mutable row per company, a
+  single global top-100 list, a 4-component score. See `RADAR_SCORE_SPEC.md`.
+- **v2** (`scraper/main_v2.py`, the `companies`/`company_events` model, `frontend/index_v2.html`) —
+  a company-plus-events data model with verified homepage/careers-page resolution, entity
+  resolution (no more name-only duplicates), source tiering, a recency-decayed and stage-adjusted
+  7-component score, and three **independently ranked** Top 50 regional lists (US / India / Rest
+  of World) instead of one global Top 100. Not yet wired into the scheduled workflow — see
+  `MIGRATION.md` for the exact cutover sequence, `RANKING_METHODOLOGY.md` for the full scoring
+  model, and `scraper/main_v2.py`'s own docstring for what's been unit/integration-tested (240+
+  tests, every I/O boundary mocked) versus what still needs a live dry run against real
+  Gemini/Groq/Supabase credentials before you point the schedule at it.
+
 **This project was scoped down from a much larger "full startup intelligence platform" spec**
-(licensed data providers, entity resolution, auth/subscriptions, a Next.js/FastAPI rewrite, etc.)
-to what's actually buildable free-tier-only. See `STARTUPRADAR_ARCHITECTURE.md` for the full
-reasoning, `DATA_SOURCE_REGISTRY.md` for every source considered (enabled, deferred, or
-deliberately not built), and `RADAR_SCORE_SPEC.md` for the scoring model.
+(licensed data providers, auth/subscriptions, a Next.js/FastAPI rewrite, etc.) to what's actually
+buildable free-tier-only. See `STARTUPRADAR_ARCHITECTURE.md` for the full reasoning,
+`DATA_SOURCE_REGISTRY.md` for every source considered (enabled, deferred, or deliberately not
+built), `RADAR_SCORE_SPEC.md` for the v1 scoring model, and `RANKING_METHODOLOGY.md` for v2's.
 
 ## How it works
 
@@ -227,23 +242,54 @@ site itself even if a GitHub Actions failure email gets missed.
 
 ## Files
 
+### Shared / docs
+
 - `STARTUPRADAR_ARCHITECTURE.md` — current architecture, what was scoped out and why, phase plan
 - `DATA_SOURCE_REGISTRY.md` — every source considered: enabled, deferred (free but not built yet),
   or deliberately not built (requires a paid license)
-- `RADAR_SCORE_SPEC.md` — the Momentum Score formula, components, and what it doesn't claim
-- `supabase_schema.sql` — run once in Supabase (upgrade-safe)
-- `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world, YC blog)
-- `scraper/gemini_client.py` — Gemini API client with self-healing model/version discovery
-- `scraper/groq_client.py` — Groq API client, used only as a fallback (see Reliability above)
-- `scraper/llm.py` — tries Gemini then Groq for every LLM call; extractor.py/enrich.py use this
-- `scraper/extractor.py` — Data Engine, phase 1: LLM extraction + region/funding-amount parsing
-- `scraper/enrich.py` — Data Engine, phase 2: company-website discovery + regex + LLM refine pass
-- `scraper/scoring.py` — Intelligence Engine: momentum_score + data_confidence from `score_weights`
-- `scraper/main.py` — orchestrates the weekly run, upserts into `startups`, writes
-  `company_snapshots`, fails loud on total outage
-- `scraper/news_job.py` — orchestrates the daily headline refresh into `news_feed` (no LLM)
-- `.github/workflows/weekly.yml` — free weekly scheduler for the startup table
-- `.github/workflows/daily_news.yml` — free daily scheduler for the news sidebar
-- `.github/workflows/deploy_frontend.yml` — auto-deploys `frontend/` to terralytixai.com over
-  SFTP on every push to `main` that touches it
-- `frontend/index.html` — the page that gets deployed to your site
+- `RADAR_SCORE_SPEC.md` — v1's Momentum Score formula (historical; superseded by v2 below)
+- `RANKING_METHODOLOGY.md` — v2's full scoring methodology, eligibility, decay, stage adjustment,
+  source tiers, confidence model, and known limitations
+- `MIGRATION.md` — the exact v1→v2 cutover sequence (database, pipeline, frontend, schedule) and
+  rollback plan
+- `RUNBOOK.md` — operations quick reference: secrets, manual triggers, tuning knobs, debugging
+- `supabase_schema.sql` — v1 schema, run once in Supabase (upgrade-safe)
+- `supabase_migration_v2.sql` — v2 schema migration, idempotent, additive-only (see `MIGRATION.md`)
+- `scraper/sources.py` — free RSS/API news sources (USA, India/Chennai, rest of world, YC blog),
+  shared by both pipeline versions
+- `scraper/gemini_client.py` / `scraper/groq_client.py` / `scraper/llm.py` — LLM provider clients
+  with self-healing model discovery and cross-provider fallback, shared by both versions
+- `scraper/news_job.py` / `scraper/news_relevance.py` — daily headline refresh into `news_feed`
+  (no LLM), now filtered for promo/webinar/pure-macro noise
+- `scraper/tests/` — 240+ pytest tests covering both the deterministic v2 modules and an end-to-end
+  mocked run of `main_v2.py`; run with `pytest scraper/tests/` (see `RUNBOOK.md`)
+
+### v1 (live today)
+
+- `scraper/extractor.py` / `scraper/enrich.py` / `scraper/scoring.py` / `scraper/main.py` — the
+  original Data/Intelligence Engine: LLM extraction, "first link" homepage guessing, momentum
+  score from 4 heuristic components, upserts into `startups`
+- `.github/workflows/ranking_refresh.yml` — scheduled Mon/Wed/Fri 06:00 UTC, runs `main.py`
+- `frontend/index.html` — the page currently deployed to your site
+
+### v2 (see `MIGRATION.md` before switching to this)
+
+- `scraper/domain_rules.py` / `scraper/homepage_validator.py` — verified homepage resolution
+  (denylists + content-type/redirect validation), replacing "take the first link"
+- `scraper/careers_validator.py` — verified hiring-page detection, replacing "200 means hiring"
+- `scraper/currency.py` — multi-currency amount parsing + funding-vs-valuation-vs-proposed
+  classification
+- `scraper/entity_resolution.py` — domain/alias-based company identity, no more name-only duplicates
+- `scraper/source_tiers.py` — source tiering + syndicated-source deduplication
+- `scraper/confidence.py` — separated data confidence vs. completeness
+- `scraper/decay.py` / `scraper/stage_scoring.py` / `scraper/component_scoring.py` /
+  `scraper/ranking.py` — recency decay, stage-adjusted funding, the 7 v2 score components, and
+  independent per-region ranking with deterministic tie-breaking
+- `scraper/llm_contract.py` — strict schema/evidence validation of LLM output
+- `scraper/upsert_rules.py` — field-level preservation rules (never silently regress a verified fact)
+- `scraper/quality_report.py` — sanitized post-run quality report + launch-threshold gating
+- `scraper/extractor_v2.py` / `scraper/enrich_v2.py` / `scraper/supabase_client_v2.py` /
+  `scraper/main_v2.py` — the v2 orchestration layer wiring all of the above together
+- `.github/workflows/ranking_refresh_v2.yml` — manual-only (`workflow_dispatch`), for testing v2
+  against real credentials before switching the schedule to it
+- `frontend/index_v2.html` — three independent regional lists, verification UI, methodology modal

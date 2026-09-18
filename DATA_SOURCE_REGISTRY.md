@@ -1,3 +1,9 @@
+> **v2 note:** source *tiering* (authoritative / established journalism / discovery-only) is now
+> implemented separately from this registry's enabled/disabled status — see
+> `scraper/source_tiers.py` and `RANKING_METHODOLOGY.md`'s "Source tiers" section. This registry
+> still answers "is reading this source permitted at all"; `source_tiers.py` answers "how much
+> should a claim from this source be trusted."
+
 # Data Source Registry
 
 Every source this project could plausibly use, its status, and why. Per the "legal/compliance"
