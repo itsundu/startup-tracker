@@ -105,6 +105,22 @@ def insert_alias(base_url, service_key, company_id, alias, normalized_alias, sou
         print(f"[warn] Failed to insert alias: {resp.status_code} {resp.text[:300]}")
 
 
+def fetch_company_events(base_url, service_key, company_id):
+    """ALL historical events for one company, not just ones extracted this
+    run -- scoring/eligibility/funding-aggregate computation must consider a
+    company's full recent history (e.g. a funding round found two runs ago
+    is still within the 90-day high-impact window today even if this run's
+    articles don't happen to mention it again), not just today's batch."""
+    resp = requests.get(
+        f"{base_url}/rest/v1/company_events",
+        headers=_headers(service_key),
+        params={"company_id": f"eq.{company_id}", "select": "*", "order": "published_at.desc"},
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def insert_company_event(base_url, service_key, event_fields):
     headers = _headers(service_key)
     headers["Prefer"] = "resolution=merge-duplicates,return=minimal"

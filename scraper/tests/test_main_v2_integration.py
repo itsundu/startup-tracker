@@ -66,6 +66,9 @@ class FakeDB:
     def insert_company_event(self, base_url, key, fields):
         self.events.append(fields)
 
+    def fetch_company_events(self, base_url, key, company_id):
+        return [e for e in self.events if e["company_id"] == company_id]
+
     def insert_company_source(self, base_url, key, fields):
         self.sources.append(fields)
 
@@ -142,6 +145,11 @@ def test_process_run_end_to_end_with_mocked_io(monkeypatch):
     beta = next(c for c in fake_db.companies.values() if c["canonical_name"] == "Beta Fintech")
     assert acme["region_bucket"] == "US"
     assert beta["region_bucket"] == "INDIA"
+
+    # Funding aggregate fields denormalized onto the company row.
+    assert acme["latest_funding_stage"] == "series a"
+    assert acme["latest_funding_amount_usd"] == 8_000_000
+    assert acme["total_disclosed_funding_usd"] == 8_000_000
 
     # Quality report shape sanity.
     assert report.score_version == "v2"

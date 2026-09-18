@@ -234,8 +234,6 @@ def process_run(now=None):
             continue
 
         # ---- events + sources ----
-        source_records = []
-        events_for_scoring = []
         best_source_tier = None
         for claim in group["claims"]:
             is_own_domain = bool(enrichment.get("primary_domain")) and registrable_domain(claim.get("source_url")) == enrichment.get("primary_domain")
@@ -283,19 +281,58 @@ def process_run(now=None):
                 "verification_status": verification_status,
             }
             db.insert_company_event(SUPABASE_URL, SUPABASE_SERVICE_KEY, event_fields)
-            events_for_scoring.append({**event_fields, "event_date": (claim.get("published_at") or "")[:10] or None})
 
-            if claim.get("source_url"):
-                source_records.append(SourceRecord(
-                    url=claim["source_url"], title=claim.get("company_name") or "",
-                    body=claim.get("evidence_excerpt") or "",
-                ))
+        # Re-fetch this company's FULL event history (not just what this
+        # run's articles happened to mention) before scoring/eligibility --
+        # a funding round found two runs ago is still inside the 90-day
+        # high-impact window today even if today's articles are silent on
+        # it. Using only this run's in-memory claims here would make a
+        # company's momentum silently vanish between runs that don't
+        # happen to re-cover it. One extra read per company per run; an
+        # acceptable cost at this project's target scale (<=150 ranked
+        # companies), not optimized into a single batched query for now.
+        all_events = db.fetch_company_events(SUPABASE_URL, SUPABASE_SERVICE_KEY, company_id)
+        events_for_scoring = all_events
+        source_records = [
+            SourceRecord(url=e["source_url"], title=e.get("title") or "", body=e.get("evidence_text") or "")
+            for e in all_events if e.get("source_url")
+        ]
 
         independent_sources = count_independent_sources(source_records)
 
-        # ---- funding for stage-adjusted scoring (peer pass happens after this loop) ----
-        completed_funding = [e for e in events_for_scoring if e["event_type"] == "funding_round_completed" and e["verification_status"] == "completed" and e["amount_usd"]]
-        latest_funding = max(completed_funding, key=lambda e: e.get("published_at") or "", default=None)
+        # ---- funding for stage-adjusted scoring AND the frontend's funding columns ----
+        # (companies has no per-row funding fields until patched here -- see
+        # supabase_migration_v2.sql's `latest_funding_*`/`total_disclosed_funding_usd`
+        # columns, denormalized specifically so the frontend never needs a
+        # company_events query per row.)
+        completed_funding = [e for e in all_events if e["event_type"] == "funding_round_completed" and e["verification_status"] == "completed" and e["amount_usd"]]
+        # Two publications covering the SAME round produce two distinct
+        # company_events rows (the uniqueness constraint is per company+
+        # source+type, not per underlying round), which would double-count
+        # that round's amount in the total. Collapse events sharing an
+        # identical (stage, amount) as almost certainly the same round
+        # reported twice -- an imperfect heuristic (a company could
+        # coincidentally raise two same-stage, same-amount rounds), but a
+        # much smaller error than not deduplicating at all.
+        seen_round_keys = set()
+        unique_completed_funding = []
+        for e in completed_funding:
+            round_key = (e.get("funding_stage"), e.get("amount_usd"))
+            if round_key in seen_round_keys:
+                continue
+            seen_round_keys.add(round_key)
+            unique_completed_funding.append(e)
+
+        latest_funding = max(unique_completed_funding, key=lambda e: e.get("published_at") or "", default=None)
+        total_disclosed_funding_usd = sum(e["amount_usd"] for e in unique_completed_funding) or None
+
+        if completed_funding:
+            db.patch_company(SUPABASE_URL, SUPABASE_SERVICE_KEY, company_id, {
+                "latest_funding_stage": latest_funding["funding_stage"],
+                "latest_funding_amount_usd": latest_funding["amount_usd"],
+                "latest_funding_date": (latest_funding.get("published_at") or "")[:10] or None,
+                "total_disclosed_funding_usd": total_disclosed_funding_usd,
+            })
 
         # ---- eligibility inputs ----
         most_recent_event_date = max((e.get("published_at") or "" for e in events_for_scoring), default="")

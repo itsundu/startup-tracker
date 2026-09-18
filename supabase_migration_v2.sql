@@ -87,6 +87,14 @@ create table if not exists companies (
   hiring_status text default 'unknown',          -- actively_hiring | limited_hiring | no_verified_openings | unknown
   hiring_confidence int,
   verified_open_role_count int,
+  -- Denormalized latest/aggregate funding facts, kept in sync by main_v2.py
+  -- whenever it processes a funding_round_completed event for this company.
+  -- Denormalized deliberately: the frontend lists up to 150 companies per
+  -- page load and must not issue a company_events query per row.
+  latest_funding_stage text,
+  latest_funding_amount_usd numeric,
+  latest_funding_date date,
+  total_disclosed_funding_usd numeric,
   entity_resolution_needs_review boolean default false,
   why_ranked text,
   rank_change_since_previous_snapshot int,
@@ -311,6 +319,8 @@ select
   headquarters_country, region_bucket, founders, employee_count_min,
   employee_count_max, employee_count_as_of, moat_summary, moat_evidence,
   moat_confidence, hiring_status, hiring_confidence, verified_open_role_count,
+  latest_funding_stage, latest_funding_amount_usd, latest_funding_date,
+  total_disclosed_funding_usd,
   momentum_score, regional_rank, rank_change_since_previous_snapshot,
   data_confidence, data_completeness, why_ranked, score_version,
   last_seen, last_verified, active
