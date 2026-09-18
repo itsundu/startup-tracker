@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Startup Radar</title>
+<meta name="description" content="Startup Radar — independently ranked Top 50 US, India, and Rest of World startup momentum lists, built from evidence-backed, source-linked signals.">
+<link rel="icon" type="image/png" href="images/StartupRadar_logo_blue_noBG.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:         #F6F7FB;
+    --bg-panel:   #FFFFFF;
+    --bg-alt:     #EEF0F6;
+    --line:       rgba(15,17,32,0.09);
+    --ink:        #0F1120;
+    --ink-dim:    #5B6482;
+    --amber:      #B7791F;
+    --amber-ink:  #FFF7EA;
+    --teal:       #0F9D78;
+    --teal-tint:  rgba(15,157,120,.12);
+    --amber-tint: rgba(183,121,31,.12);
+    --red:        #C0392B;
+    --red-tint:   rgba(192,57,43,.12);
+    --shadow:     0 1px 2px rgba(16,24,40,.04), 0 1px 6px rgba(16,24,40,.05);
+    --radius:     12px;
+    --radius-sm:  8px;
+  }
+  html[data-theme="dark"]{
+    --bg:         #090B12;
+    --bg-panel:   #0E1220;
+    --bg-alt:     #131A2C;
+    --line:       rgba(255,255,255,0.08);
+    --ink:        #EEF1F8;
+    --ink-dim:    #8B93AC;
+    --amber:      #E0AC4F;
+    --amber-ink:  #1a1204;
+    --teal:       #1FD6A3;
+    --teal-tint:  rgba(31,214,163,.15);
+    --amber-tint: rgba(224,172,79,.15);
+    --red:        #E5695C;
+    --red-tint:   rgba(229,105,92,.15);
+    --shadow:     0 1px 2px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--ink); font-family:'Space Grotesk', sans-serif;
+    min-height:100vh; transition:background .15s ease, color .15s ease;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .wrap{max-width:1360px;margin:0 auto;padding:24px 20px 64px;}
+  a{color:inherit;}
+
+  /* Top bar */
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    border-bottom:3px solid var(--amber);
+    padding:14px 20px;margin-bottom:20px;box-shadow:var(--shadow);
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-0.01em;}
+  .brand span{color:var(--amber);}
+  .brand-logo{height:28px;width:auto;display:none;}
+  html:not([data-theme="dark"]) .brand-logo.logo-light{display:block;}
+  html[data-theme="dark"] .brand-logo.logo-dark{display:block;}
+  .topbar-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(31,214,163,.6);animation:pulse 2s infinite;}
+  .dot-stale{background:var(--red);animation:none;box-shadow:none;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(31,214,163,.55);}
+    70%{box-shadow:0 0 0 8px rgba(31,214,163,0);}
+    100%{box-shadow:0 0 0 0 rgba(31,214,163,0);}
+  }
+  .btn{
+    background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);
+    font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;
+    padding:9px 14px;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover, .btn:focus-visible{border-color:var(--amber);color:var(--amber);}
+  .theme-toggle{
+    width:32px;height:32px;border-radius:50%;padding:0;
+    background:var(--bg-panel);border:1px solid var(--line);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;cursor:pointer;transition:border-color .15s;
+  }
+  .theme-toggle:hover{border-color:var(--amber);}
+  .subsidiary-link{font-size:12px;color:var(--ink-dim);white-space:nowrap;}
+  .subsidiary-link a{color:var(--teal);text-decoration:none;font-weight:600;}
+  .subsidiary-link a:hover{text-decoration:underline;}
+
+  /* Hero + disclaimer */
+  .hero{margin:8px 0 16px;max-width:900px;}
+  .hero h1{font-weight:700;font-size:clamp(26px,3.6vw,38px);line-height:1.2;letter-spacing:-0.015em;margin:0 0 14px;}
+  .hero p{color:var(--ink-dim);font-size:14.5px;line-height:1.8;margin:0;}
+  .disclaimer{
+    display:flex;gap:10px;align-items:flex-start;
+    background:var(--amber-tint);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 16px;margin-bottom:20px;font-size:12.5px;color:var(--ink);line-height:1.6;
+  }
+  .disclaimer b{color:var(--amber);}
+  .disclaimer button{
+    background:none;border:none;color:var(--teal);font-weight:600;cursor:pointer;
+    font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;white-space:nowrap;
+  }
+
+  /* Region tabs */
+  .region-tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--line);}
+  .region-tab{
+    background:none;border:none;padding:10px 18px;font-family:'Space Grotesk',sans-serif;
+    font-size:14px;font-weight:600;color:var(--ink-dim);cursor:pointer;
+    border-bottom:3px solid transparent;margin-bottom:-2px;
+  }
+  .region-tab[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber);}
+  .region-tab:hover{color:var(--ink);}
+  .region-tab .count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-dim);margin-left:6px;}
+
+  /* Controls */
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);}
+  .controls label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
+  .controls input, .controls select{
+    background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);
+    font-family:'Space Grotesk',sans-serif;font-size:13.5px;padding:9px 12px;border-radius:var(--radius-sm);outline:none;
+  }
+  .controls input{flex:1;min-width:220px;}
+  .controls input:focus, .controls select:focus{border-color:var(--amber);}
+
+  /* Charts */
+  .charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:16px;}
+  .chart-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
+  .chart-card h3{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin:0 0 14px;}
+  .bar-chart{display:flex;flex-direction:column;gap:6px;}
+  .bar-row{display:grid;grid-template-columns:96px 1fr 28px;align-items:center;gap:10px;}
+  .bar-label{font-size:11.5px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{background:var(--bg-alt);border-radius:999px;height:12px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:999px;min-width:3px;transition:width .3s ease;}
+  .bar-value{font-size:11.5px;text-align:right;color:var(--ink);font-family:'IBM Plex Mono',monospace;}
+  .chart-empty{padding:16px 4px;text-align:center;font-size:12px;color:var(--ink-dim);}
+
+  @media (max-width:700px){ .charts-grid{grid-template-columns:1fr;} }
+
+  /* Table */
+  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg-panel);box-shadow:var(--shadow);}
+  .pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 16px;border-top:1px solid var(--line);}
+  .pagination-top{border-top:none;border-bottom:1px solid var(--line);}
+  .page-info{font-size:12px;color:var(--ink-dim);}
+  .page-controls{display:flex;align-items:center;gap:12px;}
+  .page-btn{background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;}
+  .page-btn:hover:not(:disabled){border-color:var(--amber);color:var(--amber);}
+  .page-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .page-current{font-size:12px;color:var(--ink-dim);}
+
+  .scrollbar-top{padding:10px 16px;border-bottom:1px solid var(--line);}
+  .scrollbar-track{position:relative;height:8px;background:var(--bg-alt);border-radius:999px;cursor:pointer;}
+  .scrollbar-thumb{position:absolute;top:0;left:0;height:100%;min-width:30px;background:var(--ink-dim);border-radius:999px;cursor:grab;transition:background .15s;}
+  .scrollbar-thumb:hover, .scrollbar-thumb.dragging{background:var(--amber);}
+  .scrollbar-thumb.dragging{cursor:grabbing;}
+  .table-scroll{overflow-x:auto;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-dim);background:var(--bg-alt);padding:13px 14px;border-bottom:2px solid var(--amber);
+    cursor:pointer;white-space:nowrap;
+  }
+  thead th:hover{color:var(--amber);}
+  thead th:first-child, tbody td:first-child{position:sticky;left:0;z-index:1;background:var(--bg-alt);}
+  tbody tr:nth-child(4n+1) td:first-child, tbody tr:nth-child(4n+2) td:first-child{background:var(--bg-panel);}
+  tbody tr.detail-open td:first-child{background:var(--bg-alt);}
+  .filter-row th{cursor:default;text-transform:none;letter-spacing:normal;font-weight:400;padding:8px 10px;background:var(--bg-panel);border-bottom:1px solid var(--line);}
+  .filter-row th:hover{color:inherit;}
+  .col-filter{width:100%;min-width:70px;box-sizing:border-box;background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 8px;border-radius:6px;outline:none;}
+  .col-filter:focus{border-color:var(--amber);}
+  .col-filter::placeholder{color:var(--ink-dim);}
+
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+  tbody tr:nth-child(even){background:var(--bg-alt);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.data-row{cursor:pointer;}
+  tbody tr.data-row:hover{background:rgba(183,121,31,0.07);}
+  html[data-theme="dark"] tbody tr.data-row:hover{background:rgba(224,172,79,0.06);}
+  .rank-cell{font-weight:700;font-family:'Space Grotesk',sans-serif;font-size:14px;text-align:center;}
+  .rank-change{font-size:10.5px;margin-left:4px;font-family:'Space Grotesk',sans-serif;}
+  .rank-change.up{color:var(--teal);}
+  .rank-change.down{color:var(--red);}
+  .company{font-weight:600;font-family:'Space Grotesk',sans-serif;font-size:13.5px;}
+  .expand-caret{display:inline-block;margin-right:6px;transition:transform .15s;color:var(--ink-dim);font-size:10px;}
+  tr.detail-open .expand-caret{transform:rotate(90deg);}
+  .ext-link{margin-left:6px;color:var(--ink-dim);text-decoration:none;font-size:12px;}
+  .ext-link:hover{color:var(--amber);}
+  .muted{color:var(--ink-dim);}
+  a.src{color:var(--teal);text-decoration:none;}
+  a.src:hover{text-decoration:underline;}
+
+  .momentum-badge{display:inline-block;min-width:32px;text-align:center;padding:2px 8px;border-radius:999px;font-weight:700;font-size:12px;font-family:'Space Grotesk',sans-serif;cursor:help;white-space:nowrap;}
+  .momentum-badge.signal-high{background:var(--teal-tint);color:var(--teal);}
+  .momentum-badge.signal-mid{background:var(--amber-tint);color:var(--amber);}
+  .momentum-badge.signal-low{background:var(--bg-alt);color:var(--ink-dim);}
+
+  .confidence-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  .confidence-dot.high{background:var(--teal);}
+  .confidence-dot.mid{background:var(--amber);}
+  .confidence-dot.low{background:var(--red);}
+  .stale-flag{color:var(--red);font-weight:700;margin-left:6px;cursor:help;}
+
+  .empty, .loading{padding:60px 20px;text-align:center;color:var(--ink-dim);}
+  .region-empty{padding:48px 20px;text-align:center;color:var(--ink-dim);font-size:13.5px;line-height:1.8;}
+
+  /* Detail row */
+  .detail-row td{background:var(--bg-alt);padding:0;}
+  .detail-panel{padding:18px 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 24px;font-family:'Space Grotesk',sans-serif;font-size:12.5px;}
+  .detail-field h4{margin:0 0 4px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-dim);font-weight:600;}
+  .detail-field div{color:var(--ink);line-height:1.6;}
+  .detail-field.full{grid-column:1 / -1;}
+  .why-ranked-box{background:var(--teal-tint);border-radius:var(--radius-sm);padding:10px 12px;color:var(--ink);}
+  .sources-list{display:flex;flex-direction:column;gap:6px;}
+  .sources-list a{color:var(--teal);text-decoration:none;font-size:12px;}
+  .sources-list a:hover{text-decoration:underline;}
+  .verification-tag{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-dim);margin-left:6px;}
+
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(9,11,18,0.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:50;}
+  .modal-overlay[hidden]{display:none;}
+  .modal{background:var(--bg-panel);border-radius:var(--radius);max-width:720px;width:100%;max-height:85vh;overflow-y:auto;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modal h2{margin-top:0;}
+  .modal h3{font-size:14px;margin:20px 0 6px;}
+  .modal p, .modal li{font-size:13.5px;line-height:1.75;color:var(--ink-dim);}
+  .modal-close{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-dim);}
+  .modal-close:hover{color:var(--amber);}
+
+  /* News sidebar */
+  .layout{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;margin-bottom:20px;}
+  .sidebar-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-panel);padding:16px;position:sticky;top:20px;box-shadow:var(--shadow);}
+  .sidebar-card h2{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin:0 0 4px;}
+  .sidebar-sub{font-size:11px;color:var(--ink-dim);margin:0 0 14px;}
+  .news-list{display:flex;flex-direction:column;gap:12px;max-height:680px;overflow-y:auto;padding-right:2px;}
+  .news-item{display:block;text-decoration:none;color:inherit;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .news-item:last-child{border-bottom:none;padding-bottom:0;}
+  .news-title{font-size:12.5px;font-weight:500;color:var(--ink);line-height:1.45;margin-bottom:5px;}
+  .news-item:hover .news-title{color:var(--amber);}
+  .news-meta{font-size:10.5px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.03em;}
+
+  .site-footer{margin-top:32px;padding:18px 20px;text-align:center;background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);border-top:3px solid var(--amber);box-shadow:var(--shadow);font-size:12.5px;color:var(--ink-dim);}
+  .site-footer a{color:var(--teal);text-decoration:none;font-weight:600;}
+  .site-footer a:hover{text-decoration:underline;}
+  .site-footer div + div{margin-top:4px;}
+
+  @media (max-width:900px){ .layout{grid-template-columns:1fr;} .sidebar-card{position:static;} }
+
+  :focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <img class="brand-logo logo-dark" src="images/StartupRadar_logo_white_noBG.png" alt="Startup Radar logo">
+      <img class="brand-logo logo-light" src="images/StartupRadar_logo_blue_noBG.png" alt="Startup Radar logo">
+      STARTUP <span>RADAR</span>
+    </div>
+    <div class="topbar-right">
+      <span class="subsidiary-link">A subsidiary of <a href="https://terralytixai.com" target="_blank" rel="noopener">TERRALYTIX</a></span>
+      <div class="status"><span class="dot" id="status-dot"></span><span id="last-updated">Loading last scan…</span></div>
+      <button type="button" class="btn" id="open-methodology">Methodology</button>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle dark/light theme">🌙</button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <h1>Where Emerging Giants Get Discovered.</h1>
+    <p>Startup Radar independently ranks the Top 50 United States, Top 50 India, and Top 50 Rest of World private startups in AI, enterprise/developer technology, FinTech, PropTech, and real estate technology, from recent, evidence-backed, source-linked momentum signals.</p>
+  </div>
+
+  <div class="disclaimer">
+    <span aria-hidden="true">ⓘ</span>
+    <span><b>This is a discovery tool, not investment advice.</b> Startup Radar ranks recent, publicly
+      verifiable momentum signals — it does not predict success, valuation, or investment returns.
+      Every score component and eligibility rule is documented in the
+      <button type="button" id="open-methodology-inline">methodology</button>.</span>
+  </div>
+
+  <div class="region-tabs" role="tablist" aria-label="Region">
+    <button class="region-tab" role="tab" data-region="US" aria-selected="true">United States<span class="count" id="count-US"></span></button>
+    <button class="region-tab" role="tab" data-region="INDIA" aria-selected="false">India<span class="count" id="count-INDIA"></span></button>
+    <button class="region-tab" role="tab" data-region="ROW" aria-selected="false">Rest of World<span class="count" id="count-ROW"></span></button>
+  </div>
+
+  <div class="layout">
+    <div class="main-col">
+
+      <form class="controls" role="search" aria-label="Filter startups">
+        <label for="search">Search</label>
+        <input type="text" id="search" placeholder="Search company, description, investor…">
+        <label for="filter-industry">Industry</label>
+        <select id="filter-industry"><option value="">All industries</option></select>
+        <label for="filter-stage">Funding stage</label>
+        <select id="filter-stage"><option value="">All stages</option></select>
+        <label for="filter-hiring">Hiring status</label>
+        <select id="filter-hiring"><option value="">Hiring: any</option></select>
+        <label for="filter-momentum-tier">Momentum tier</label>
+        <select id="filter-momentum-tier">
+          <option value="">Momentum: any</option>
+          <option value="high">High (70-100)</option>
+          <option value="mid">Mid (40-69)</option>
+          <option value="low">Low (0-39)</option>
+        </select>
+        <label for="filter-confidence-tier">Confidence tier</label>
+        <select id="filter-confidence-tier">
+          <option value="">Confidence: any</option>
+          <option value="high">High (≥70)</option>
+          <option value="mid">Medium (40-69)</option>
+          <option value="low">Low (&lt;40)</option>
+        </select>
+        <label for="filter-investor">Investor</label>
+        <select id="filter-investor"><option value="">All investors</option></select>
+        <label for="filter-founded">Founded year</label>
+        <select id="filter-founded"><option value="">Founded: any year</option></select>
+        <button type="button" id="download-csv" class="btn">⬇ Download CSV</button>
+      </form>
+
+      <section class="charts-grid" id="charts-grid" aria-label="Distribution charts for the current region">
+        <div class="chart-card"><h3>By Industry</h3><div class="bar-chart" id="chart-industry"></div></div>
+        <div class="chart-card"><h3>By Funding Stage</h3><div class="bar-chart" id="chart-stage"></div></div>
+        <div class="chart-card"><h3>By Hiring Status</h3><div class="bar-chart" id="chart-hiring"></div></div>
+        <div class="chart-card"><h3>By Momentum Tier</h3><div class="bar-chart" id="chart-momentum"></div></div>
+      </section>
+
+    </div>
+
+    <aside class="sidebar">
+      <div class="sidebar-card">
+        <h2>Latest AI &amp; Startup News</h2>
+        <p class="sidebar-sub">Refreshed daily</p>
+        <div id="news-list" class="news-list"><div class="loading">Loading news…</div></div>
+      </div>
+    </aside>
+  </div>
+
+  <main class="table-outer">
+    <div class="pagination pagination-top" id="pagination-top"></div>
+    <div class="scrollbar-top" id="scrollbar-top">
+      <div class="scrollbar-track" id="scrollbar-track"><div class="scrollbar-thumb" id="scrollbar-thumb"></div></div>
+    </div>
+    <div class="table-scroll" id="table-scroll">
+    <table id="startup-table">
+      <caption class="visually-hidden" style="position:absolute;width:1px;height:1px;overflow:hidden;">Ranked startups for the selected region</caption>
+      <thead>
+        <tr>
+          <th data-key="regional_rank" scope="col">Rank</th>
+          <th data-key="canonical_name" scope="col">Company</th>
+          <th data-key="headquarters_country" scope="col">Headquarters</th>
+          <th data-key="founded_year" scope="col">Founded</th>
+          <th data-key="industry" scope="col">Industry</th>
+          <th data-key="description" scope="col">What they do</th>
+          <th data-key="latest_funding_stage" scope="col">Stage</th>
+          <th data-key="latest_funding_amount_usd" scope="col">Latest Amount</th>
+          <th data-key="momentum_score" scope="col">Momentum</th>
+          <th data-key="data_confidence" scope="col">Confidence</th>
+          <th data-key="hiring_status" scope="col">Hiring</th>
+          <th data-key="last_verified" scope="col">Last Verified</th>
+        </tr>
+        <tr class="filter-row">
+          <th></th>
+          <th><input type="text" class="col-filter" data-filter-key="canonical_name" placeholder="Filter…" aria-label="Filter by company"></th>
+          <th><input type="text" class="col-filter" data-filter-key="headquarters_country" placeholder="Filter…" aria-label="Filter by headquarters"></th>
+          <th><input type="text" class="col-filter" data-filter-key="founded_year" placeholder="Filter…" aria-label="Filter by founded year"></th>
+          <th><input type="text" class="col-filter" data-filter-key="industry" placeholder="Filter…" aria-label="Filter by industry"></th>
+          <th><input type="text" class="col-filter" data-filter-key="description" placeholder="Filter…" aria-label="Filter by description"></th>
+          <th><input type="text" class="col-filter" data-filter-key="latest_funding_stage" placeholder="Filter…" aria-label="Filter by stage"></th>
+          <th><input type="text" class="col-filter" data-filter-key="latest_funding_amount_usd" placeholder="Filter…" aria-label="Filter by amount"></th>
+          <th><input type="text" class="col-filter" data-filter-key="momentum_score" placeholder="Filter…" aria-label="Filter by momentum"></th>
+          <th><input type="text" class="col-filter" data-filter-key="data_confidence" placeholder="Filter…" aria-label="Filter by confidence"></th>
+          <th><input type="text" class="col-filter" data-filter-key="hiring_status" placeholder="Filter…" aria-label="Filter by hiring status"></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr><td colspan="12" class="loading">Loading startups…</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div>Startup Radar is a subsidiary of <a href="https://terralytixai.com" target="_blank" rel="noopener">TERRALYTIX</a></div>
+    <div>Site designed &amp; maintained by <a href="https://www.SundarDesignStudio.com" target="_blank" rel="noopener">www.SundarDesignStudio.com</a></div>
+  </footer>
+
+</div>
+
+<div class="modal-overlay" id="methodology-modal" hidden role="dialog" aria-modal="true" aria-labelledby="methodology-title">
+  <div class="modal">
+    <button type="button" class="modal-close" id="close-methodology" aria-label="Close methodology">×</button>
+    <h2 id="methodology-title">Ranking Methodology</h2>
+    <p>Startup Radar ranks recent, publicly verifiable momentum signals. <b>It is a discovery tool,
+      not investment advice or a prediction of company success.</b></p>
+
+    <h3>Eligibility</h3>
+    <p>A company is only ranked once its headquarters region, primary domain, and industry are
+      verified, it has at least one qualifying event within the last 180 days, its data confidence
+      is at least 60/100, and its evidence isn't based solely on a single weak discovery source.
+      Companies that are shut down, acquired, or a large public incumbent are excluded, as are ones
+      whose identity is still ambiguous (e.g. confused with a similarly named company).</p>
+
+    <h3>Three independent regional lists</h3>
+    <p>United States, India, and Rest of World are ranked completely separately, each against its
+      own candidate pool — not a single global list split up afterward. If fewer than 50 companies
+      in a region qualify, the list simply shows fewer than 50; nothing is invented to fill it out.</p>
+
+    <h3>Scoring components (v2)</h3>
+    <ul>
+      <li>Recent verified events — 25%</li>
+      <li>Product &amp; customer traction — 20%</li>
+      <li>Stage-adjusted funding momentum — 15%</li>
+      <li>Verified hiring momentum — 15%</li>
+      <li>Market expansion &amp; partnerships — 10%</li>
+      <li>Technology differentiation / moat — 10%</li>
+      <li>Independent source corroboration — 5%</li>
+    </ul>
+    <p>Data confidence, data completeness, and AI relevance are shown separately and are
+      <b>not</b> part of the momentum score.</p>
+
+    <h3>Recency decay &amp; stage adjustment</h3>
+    <p>Older events contribute exponentially less (a ~45-day half-life), so momentum reflects
+      recent movement, not lifetime history. Funding amounts are scored relative to comparable
+      peers at the same stage and region, not compared raw — a strong seed round can outrank an
+      ordinary late-stage one.</p>
+
+    <h3>Source tiers &amp; confidence</h3>
+    <p>Sources are tiered (company/official/regulatory, established journalism, or discovery-only)
+      and syndicated copies of the same story are counted once, not multiple times. Data confidence
+      combines source reliability, corroboration, freshness, and completeness — an unpopulated or
+      "Unknown" field is never counted as complete.</p>
+
+    <h3>Known limitations</h3>
+    <p>This is a news- and public-record-driven discovery feed, not a licensed data provider — it
+      will miss startups that haven't received qualifying press coverage. Employee counts are shown
+      as ranges, not exact figures, when only that level of confidence is available. Version:
+      score_version <span class="mono" id="methodology-version">v2</span>.</p>
+  </div>
+</div>
+
+<script>
+  // ---- Theme ----
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = document.getElementById("theme-toggle");
+    if(btn) btn.textContent = theme === "light" ? "☀️" : "🌙";
+    try{ localStorage.setItem("startup-radar-theme", theme); }catch(e){}
+  }
+  (function initTheme(){
+    let stored = null;
+    try{ stored = localStorage.getItem("startup-radar-theme"); }catch(e){}
+    applyTheme(stored || "light");
+  })();
+  document.getElementById("theme-toggle").addEventListener("click", ()=>{
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+
+  // ---- Methodology modal ----
+  const modal = document.getElementById("methodology-modal");
+  function openModal(){ modal.hidden = false; document.getElementById("close-methodology").focus(); }
+  function closeModal(){ modal.hidden = true; }
+  document.getElementById("open-methodology").addEventListener("click", openModal);
+  document.getElementById("open-methodology-inline").addEventListener("click", openModal);
+  document.getElementById("close-methodology").addEventListener("click", closeModal);
+  modal.addEventListener("click", e => { if(e.target === modal) closeModal(); });
+  document.addEventListener("keydown", e => { if(e.key === "Escape" && !modal.hidden) closeModal(); });
+
+  // ---- URL safety: only https:, or an explicitly-approved http: host, may
+  // ever be placed in an href built from source-derived data. Mirrors
+  // scraper/url_safety.py's rule (see that file's tests for the pinned
+  // behavior); kept independently here since this is a different runtime.
+  const ALLOWED_HTTP_HOSTS = new Set();
+  function isSafeHref(url){
+    if(!url || typeof url !== "string") return false;
+    const value = url.trim();
+    if(!value) return false;
+    const low = value.toLowerCase();
+    if(["javascript:", "data:", "vbscript:", "file:"].some(s => low.startsWith(s))) return false;
+    try{
+      const parsed = new URL(value, window.location.href);
+      if(parsed.protocol === "https:") return true;
+      if(parsed.protocol === "http:") return ALLOWED_HTTP_HOSTS.has(parsed.hostname);
+      return false;
+    }catch(e){ return false; }
+  }
+  function safeHref(url){ return isSafeHref(url) ? url : "#"; }
+  function safeAttrsOrHide(url){
+    // Returns the attribute string for an <a>, or empty (rendering plain
+    // text instead) when the URL is unsafe -- never emits an href at all
+    // for a rejected scheme, rather than defaulting to "#" silently.
+    return isSafeHref(url) ? `href="${escapeHtml(url)}" target="_blank" rel="noopener"` : "";
+  }
+
+  function escapeHtml(str){
+    if(str === null || str === undefined) return "";
+    return String(str).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  }
+
+  // ---- Supabase ----
+  // Fill these in with your Supabase project's values (Project Settings -> API).
+  // The "anon public" key is safe to expose here: read-only via RLS.
+  const SUPABASE_URL = "https://ivxftbgzxxdacizxwnhc.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_ZQzA66pSAJvAV07BHaLZDg_OLxHdcnO";
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const REGIONS = ["US", "INDIA", "ROW"];
+  const REGION_LABELS = {US: "United States", INDIA: "India", ROW: "Rest of World"};
+
+  let currentRegion = "US";
+  let rowsByRegion = {US: [], INDIA: [], ROW: []};
+  let loadedRegion = {US: false, INDIA: false, ROW: false};
+  let sortKey = "regional_rank";
+  let sortDir = 1;
+  let currentPage = 1;
+  const PAGE_SIZE = 20;
+  let columnFilters = {};
+  let expandedCompanyId = null;
+
+  const EXPORT_COLUMNS = [
+    ["regional_rank", "Rank"], ["canonical_name", "Company"], ["homepage", "Homepage"],
+    ["headquarters_city", "City"], ["headquarters_state", "State"], ["headquarters_country", "Country"],
+    ["founded_year", "Founded"], ["founders", "Founder(s)"], ["industry", "Industry"],
+    ["subsector", "Subsector"], ["description", "What they do"], ["moat_summary", "Moat"],
+    ["latest_funding_stage", "Latest Stage"], ["latest_funding_amount_usd", "Latest Amount (USD)"],
+    ["latest_funding_date", "Latest Funding Date"], ["total_disclosed_funding_usd", "Total Disclosed Funding (USD)"],
+    ["momentum_score", "Momentum"], ["rank_change_since_previous_snapshot", "Rank Change"],
+    ["data_confidence", "Confidence"], ["hiring_status", "Hiring"], ["verified_open_role_count", "Open Roles"],
+    ["why_ranked", "Why Ranked"], ["last_verified", "Last Verified"],
+  ];
+
+  function fmtDate(d){
+    if(!d) return "";
+    const dt = new Date(d);
+    if(isNaN(dt)) return "";
+    return dt.toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"});
+  }
+  function fmtUsd(n){
+    if(n === null || n === undefined) return null;
+    if(n >= 1e9) return "$" + (n/1e9).toFixed(1).replace(/\.0$/,"") + "B";
+    if(n >= 1e6) return "$" + (n/1e6).toFixed(1).replace(/\.0$/,"") + "M";
+    if(n >= 1e3) return "$" + (n/1e3).toFixed(0) + "K";
+    return "$" + n;
+  }
+  function daysSince(dateStr){
+    if(!dateStr) return null;
+    const ms = Date.now() - new Date(dateStr).getTime();
+    if(isNaN(ms)) return null;
+    return Math.floor(ms / 86400000);
+  }
+
+  function confidenceTier(score){
+    if(score === null || score === undefined) return "low";
+    if(score >= 70) return "high";
+    if(score >= 40) return "mid";
+    return "low";
+  }
+  function momentumTier(score){
+    if(score === null || score === undefined) return "low";
+    if(score >= 70) return "high";
+    if(score >= 40) return "mid";
+    return "low";
+  }
+
+  // ---- Load a region's ranked companies (lazy: only fetched once per tab visit) ----
+  async function loadRegion(region){
+    if(loadedRegion[region]) return;
+    const { data, error } = await client
+      .from("v_regional_rankings")
+      .select("*")
+      .eq("region_bucket", region)
+      .order("regional_rank", { ascending: true });
+
+    if(error){
+      console.error(error);
+      rowsByRegion[region] = [];
+      loadedRegion[region] = true;
+      return;
+    }
+    rowsByRegion[region] = data || [];
+    loadedRegion[region] = true;
+    document.getElementById(`count-${region}`).textContent = `(${rowsByRegion[region].length})`;
+  }
+
+  async function switchRegion(region){
+    currentRegion = region;
+    currentPage = 1;
+    columnFilters = {};
+    document.querySelectorAll(".col-filter").forEach(i => i.value = "");
+    document.querySelectorAll(".region-tab").forEach(tab => {
+      tab.setAttribute("aria-selected", tab.dataset.region === region ? "true" : "false");
+    });
+    document.getElementById("table-body").innerHTML = `<tr><td colspan="12" class="loading">Loading startups…</td></tr>`;
+    await loadRegion(region);
+    populateFilters(rowsByRegion[region]);
+    renderTable();
+  }
+
+  document.querySelectorAll(".region-tab").forEach(tab => {
+    tab.addEventListener("click", () => switchRegion(tab.dataset.region));
+  });
+
+  // ---- Filters ----
+  function splitInvestors(text){
+    if(!text) return [];
+    return text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  function populateFilters(rows){
+    const industrySel = document.getElementById("filter-industry");
+    const stageSel = document.getElementById("filter-stage");
+    const investorSel = document.getElementById("filter-investor");
+    const foundedSel = document.getElementById("filter-founded");
+    const hiringSel = document.getElementById("filter-hiring");
+    [industrySel, stageSel, investorSel, foundedSel, hiringSel].forEach(sel => {
+      while(sel.options.length > 1) sel.remove(1);
+    });
+
+    const industries = [...new Set(rows.map(r => r.industry).filter(Boolean))].sort();
+    const stages = [...new Set(rows.map(r => r.latest_funding_stage).filter(Boolean))].sort();
+    const investors = [...new Set(rows.flatMap(r => splitInvestors(r.investors)))].sort();
+    const foundedYears = [...new Set(rows.map(r => r.founded_year).filter(Boolean))].sort((a,b) => String(b).localeCompare(String(a)));
+    const hiringStatuses = [...new Set(rows.map(r => r.hiring_status).filter(Boolean))].sort();
+
+    industries.forEach(s => industrySel.appendChild(new Option(s, s)));
+    stages.forEach(s => stageSel.appendChild(new Option(s, s)));
+    investors.forEach(s => investorSel.appendChild(new Option(s, s)));
+    foundedYears.forEach(s => foundedSel.appendChild(new Option(s, s)));
+    hiringStatuses.forEach(s => hiringSel.appendChild(new Option(s.replace(/_/g," "), s)));
+  }
+
+  function getFilteredSortedRows(){
+    const q = document.getElementById("search").value.toLowerCase();
+    const industry = document.getElementById("filter-industry").value;
+    const stage = document.getElementById("filter-stage").value;
+    const hiring = document.getElementById("filter-hiring").value;
+    const momentumTierFilter = document.getElementById("filter-momentum-tier").value;
+    const confidenceTierFilter = document.getElementById("filter-confidence-tier").value;
+    const investor = document.getElementById("filter-investor").value;
+    const founded = document.getElementById("filter-founded").value;
+
+    let rows = (rowsByRegion[currentRegion] || []).filter(r => {
+      if(industry && r.industry !== industry) return false;
+      if(stage && r.latest_funding_stage !== stage) return false;
+      if(hiring && r.hiring_status !== hiring) return false;
+      if(momentumTierFilter && momentumTier(r.momentum_score) !== momentumTierFilter) return false;
+      if(confidenceTierFilter && confidenceTier(r.data_confidence) !== confidenceTierFilter) return false;
+      if(investor && !splitInvestors(r.investors).includes(investor)) return false;
+      if(founded && String(r.founded_year) !== String(founded)) return false;
+      if(q){
+        const hay = [r.canonical_name, r.description, r.investors, r.headquarters_city, r.founders].join(" ").toLowerCase();
+        if(!hay.includes(q)) return false;
+      }
+      for(const [key, val] of Object.entries(columnFilters)){
+        const cell = r[key];
+        if(cell === null || cell === undefined) return false;
+        if(!String(cell).toLowerCase().includes(val)) return false;
+      }
+      return true;
+    });
+
+    const NUMERIC_KEYS = ["regional_rank", "momentum_score", "data_confidence", "latest_funding_amount_usd", "founded_year"];
+    rows.sort((a,b) => {
+      if(NUMERIC_KEYS.includes(sortKey)){
+        const av = a[sortKey] ?? -1, bv = b[sortKey] ?? -1;
+        return (av - bv) * sortDir;
+      }
+      const av = (a[sortKey] ?? "").toString(), bv = (b[sortKey] ?? "").toString();
+      return av.localeCompare(bv) * sortDir;
+    });
+    return rows;
+  }
+
+  // ---- Charts (scoped to current region + filters) ----
+  function computeDistribution(rows, key, maxBars = 7){
+    const counts = new Map();
+    rows.forEach(r => { const v = r[key] || "Unknown"; counts.set(v, (counts.get(v)||0)+1); });
+    let entries = [...counts.entries()].sort((a,b) => b[1]-a[1]);
+    if(entries.length > maxBars){
+      const head = entries.slice(0, maxBars-1);
+      const tail = entries.slice(maxBars-1).reduce((s,[,c]) => s+c, 0);
+      entries = [...head, ["Other", tail]];
+    }
+    return entries;
+  }
+  function computeMomentumDistribution(rows){
+    let low=0, mid=0, high=0, unscored=0;
+    rows.forEach(r => {
+      const s = r.momentum_score;
+      if(s === null || s === undefined) unscored++;
+      else if(s >= 70) high++; else if(s >= 40) mid++; else low++;
+    });
+    const entries = [["High (70–100)", high], ["Mid (40–69)", mid], ["Low (0–39)", low]];
+    if(unscored > 0) entries.push(["Unscored", unscored]);
+    return entries;
+  }
+  function momentumColor(label){
+    if(label.startsWith("High")) return "var(--teal)";
+    if(label.startsWith("Mid")) return "var(--amber)";
+    return "var(--ink-dim)";
+  }
+  function renderBarChart(containerId, entries, colorFn){
+    const el = document.getElementById(containerId);
+    const total = entries.reduce((s,[,c]) => s+c, 0);
+    if(total === 0){ el.innerHTML = `<div class="chart-empty">No data yet</div>`; return; }
+    const max = Math.max(...entries.map(([,c]) => c));
+    el.innerHTML = entries.map(([label, count]) => {
+      const pct = max > 0 ? Math.round((count/max)*100) : 0;
+      const color = colorFn ? colorFn(label) : "var(--teal)";
+      return `<div class="bar-row" title="${escapeHtml(label)}: ${count} startup${count===1?'':'s'}">
+        <div class="bar-label">${escapeHtml(label)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
+        <div class="bar-value">${count}</div></div>`;
+    }).join("");
+  }
+  function renderCharts(rows){
+    renderBarChart("chart-industry", computeDistribution(rows, "industry"));
+    renderBarChart("chart-stage", computeDistribution(rows, "latest_funding_stage"));
+    renderBarChart("chart-hiring", computeDistribution(rows, "hiring_status"));
+    renderBarChart("chart-momentum", computeMomentumDistribution(rows), momentumColor);
+  }
+
+  // ---- Pagination ----
+  function renderPagination(totalItems, totalPages){
+    const topEl = document.getElementById("pagination-top");
+    const bottomEl = document.getElementById("pagination");
+    if(totalItems === 0){ topEl.innerHTML = ""; bottomEl.innerHTML = ""; return; }
+    const start = (currentPage-1)*PAGE_SIZE + 1;
+    const end = Math.min(currentPage*PAGE_SIZE, totalItems);
+    const html = `<span class="page-info">Showing ${start}–${end} of ${totalItems}</span>
+      <div class="page-controls">
+        <button class="page-btn page-prev" ${currentPage<=1?'disabled':''}>‹ Prev</button>
+        <span class="page-current mono">Page ${currentPage} of ${totalPages}</span>
+        <button class="page-btn page-next" ${currentPage>=totalPages?'disabled':''}>Next ›</button>
+      </div>`;
+    topEl.innerHTML = html; bottomEl.innerHTML = html;
+    document.querySelectorAll(".page-prev").forEach(b => b.addEventListener("click", () => { if(currentPage>1){currentPage--; renderTable(); scrollToTableTop();} }));
+    document.querySelectorAll(".page-next").forEach(b => b.addEventListener("click", () => { if(currentPage<totalPages){currentPage++; renderTable(); scrollToTableTop();} }));
+  }
+  function scrollToTableTop(){
+    const outer = document.querySelector(".table-outer");
+    if(outer) outer.scrollIntoView({behavior:"smooth", block:"start"});
+  }
+
+  // ---- Custom top scrollbar ----
+  let draggingThumb = false, dragStartX = 0, dragStartScrollLeft = 0;
+  function updateTopScrollbar(){
+    const tableScroll = document.getElementById("table-scroll");
+    const wrapper = document.getElementById("scrollbar-top");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    if(!tableScroll || !wrapper || !track || !thumb) return;
+    const scrollWidth = tableScroll.scrollWidth, clientWidth = tableScroll.clientWidth;
+    const maxScroll = scrollWidth - clientWidth;
+    if(maxScroll <= 1){ wrapper.style.display = "none"; return; }
+    wrapper.style.display = "block";
+    const trackWidth = track.clientWidth;
+    const thumbWidth = Math.max(30, (clientWidth/scrollWidth)*trackWidth);
+    const maxThumbLeft = trackWidth - thumbWidth;
+    const thumbLeft = maxThumbLeft > 0 ? (tableScroll.scrollLeft/maxScroll)*maxThumbLeft : 0;
+    thumb.style.width = thumbWidth + "px";
+    thumb.style.left = thumbLeft + "px";
+  }
+  function scrollTableFromThumbLeft(thumbLeft){
+    const tableScroll = document.getElementById("table-scroll");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    const trackWidth = track.clientWidth, thumbWidth = thumb.getBoundingClientRect().width;
+    const maxThumbLeft = trackWidth - thumbWidth;
+    const maxScroll = tableScroll.scrollWidth - tableScroll.clientWidth;
+    const clamped = Math.max(0, Math.min(maxThumbLeft, thumbLeft));
+    tableScroll.scrollLeft = maxThumbLeft > 0 ? (clamped/maxThumbLeft)*maxScroll : 0;
+  }
+  function setupTopScrollbar(){
+    const tableScroll = document.getElementById("table-scroll");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    if(!tableScroll || !track || !thumb) return;
+    tableScroll.addEventListener("scroll", updateTopScrollbar);
+    window.addEventListener("resize", updateTopScrollbar);
+    function startDrag(x){ draggingThumb = true; dragStartX = x; dragStartScrollLeft = tableScroll.scrollLeft; thumb.classList.add("dragging"); }
+    function dragTo(x){
+      if(!draggingThumb) return;
+      const trackWidth = track.clientWidth, thumbWidth = thumb.getBoundingClientRect().width;
+      const maxThumbLeft = trackWidth - thumbWidth;
+      const maxScroll = tableScroll.scrollWidth - tableScroll.clientWidth;
+      const deltaScroll = maxThumbLeft > 0 ? ((x - dragStartX)/maxThumbLeft)*maxScroll : 0;
+      tableScroll.scrollLeft = Math.max(0, Math.min(maxScroll, dragStartScrollLeft + deltaScroll));
+    }
+    function endDrag(){ if(!draggingThumb) return; draggingThumb=false; thumb.classList.remove("dragging"); document.body.style.userSelect=""; }
+    thumb.addEventListener("mousedown", e => { startDrag(e.clientX); document.body.style.userSelect="none"; e.preventDefault(); });
+    window.addEventListener("mousemove", e => dragTo(e.clientX));
+    window.addEventListener("mouseup", endDrag);
+    thumb.addEventListener("touchstart", e => startDrag(e.touches[0].clientX), {passive:true});
+    window.addEventListener("touchmove", e => { if(draggingThumb) dragTo(e.touches[0].clientX); }, {passive:true});
+    window.addEventListener("touchend", endDrag);
+    track.addEventListener("click", e => {
+      if(e.target === thumb) return;
+      const rect = track.getBoundingClientRect();
+      const thumbWidth = thumb.getBoundingClientRect().width;
+      scrollTableFromThumbLeft((e.clientX - rect.left) - thumbWidth/2);
+    });
+    updateTopScrollbar();
+  }
+
+  // ---- CSV export (current region + active filters) ----
+  function csvEscape(val){
+    if(val === null || val === undefined) return "";
+    const s = String(val);
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+  function downloadCSV(){
+    const rows = getFilteredSortedRows();
+    const header = EXPORT_COLUMNS.map(([,label]) => csvEscape(label)).join(",");
+    const lines = rows.map(r => EXPORT_COLUMNS.map(([key]) => csvEscape(r[key])).join(","));
+    const csv = "﻿" + [header, ...lines].join("\r\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `startup-radar-${currentRegion.toLowerCase()}-${stamp}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ---- Detail row (lazy-loads company_events on first expand) ----
+  const eventsCache = {};
+  async function fetchEventsForCompany(companyId){
+    if(eventsCache[companyId]) return eventsCache[companyId];
+    const { data, error } = await client
+      .from("company_events")
+      .select("event_type,event_date,published_at,source_url,source_name,verification_status,evidence_text")
+      .eq("company_id", companyId)
+      .order("published_at", {ascending:false})
+      .limit(10);
+    eventsCache[companyId] = error ? [] : (data || []);
+    return eventsCache[companyId];
+  }
+
+  function renderMomentum(score){
+    if(score === null || score === undefined) return '<span class="muted">—</span>';
+    const s = Math.max(0, Math.min(100, score));
+    const tier = s>=70?"signal-high":(s>=40?"signal-mid":"signal-low");
+    return `<span class="momentum-badge ${tier}">${s}</span>`;
+  }
+  function renderConfidence(score){
+    if(score === null || score === undefined) return '<span class="muted">—</span>';
+    const tier = confidenceTier(score);
+    return `<span class="confidence-dot ${tier}"></span>${score}`;
+  }
+  function renderRankChange(delta){
+    if(delta === null || delta === undefined || delta === 0) return "";
+    if(delta > 0) return `<span class="rank-change up" title="Moved up ${delta} place(s) since the previous run">▲${delta}</span>`;
+    return `<span class="rank-change down" title="Moved down ${Math.abs(delta)} place(s) since the previous run">▼${Math.abs(delta)}</span>`;
+  }
+  function renderStaleFlag(lastVerified){
+    const days = daysSince(lastVerified);
+    if(days === null || days <= 30) return "";
+    return `<span class="stale-flag" title="Not independently re-verified in ${days} days">⚠</span>`;
+  }
+
+  async function toggleDetailRow(row, tr){
+    const detailId = `detail-${row.id}`;
+    const existing = document.getElementById(detailId);
+    if(existing){ existing.remove(); tr.classList.remove("detail-open"); expandedCompanyId = null; return; }
+
+    document.querySelectorAll(".detail-row").forEach(el => el.remove());
+    document.querySelectorAll("tr.detail-open").forEach(el => el.classList.remove("detail-open"));
+
+    tr.classList.add("detail-open");
+    expandedCompanyId = row.id;
+    const detailTr = document.createElement("tr");
+    detailTr.className = "detail-row";
+    detailTr.id = detailId;
+    detailTr.innerHTML = `<td colspan="12"><div class="detail-panel"><div class="detail-field full">Loading evidence…</div></div></td>`;
+    tr.after(detailTr);
+
+    const events = await fetchEventsForCompany(row.id);
+    const employeeRange = (row.employee_count_min && row.employee_count_max)
+      ? `${row.employee_count_min}–${row.employee_count_max}` : "Unknown";
+
+    const sourcesHtml = events.length
+      ? `<div class="sources-list">${events.map(e => {
+          const attrs = safeAttrsOrHide(e.source_url);
+          const label = escapeHtml(e.source_name || e.source_url || "source");
+          const link = attrs ? `<a ${attrs}>${label}</a>` : `<span>${label}</span>`;
+          return `<div>${link} — ${escapeHtml((e.event_type||"").replace(/_/g," "))}
+            <span class="verification-tag">${escapeHtml(e.verification_status||"")}</span></div>`;
+        }).join("")}</div>`
+      : `<span class="muted">No linked events yet.</span>`;
+
+    detailTr.querySelector(".detail-panel").innerHTML = `
+      <div class="detail-field"><h4>Headquarters</h4><div>${escapeHtml([row.headquarters_city, row.headquarters_state, row.headquarters_country].filter(Boolean).join(", ")) || '<span class="muted">Unverified</span>'}</div></div>
+      <div class="detail-field"><h4>Founder(s)</h4><div>${escapeHtml(row.founders) || '<span class="muted">Unknown</span>'}</div></div>
+      <div class="detail-field"><h4>Subsector</h4><div>${escapeHtml(row.subsector) || '<span class="muted">—</span>'}</div></div>
+      <div class="detail-field"><h4>Company size</h4><div>${escapeHtml(employeeRange)}</div></div>
+      <div class="detail-field"><h4>Verified open roles</h4><div>${row.verified_open_role_count ?? '<span class="muted">—</span>'}</div></div>
+      <div class="detail-field"><h4>Total disclosed funding</h4><div>${row.total_disclosed_funding_usd ? escapeHtml(fmtUsd(row.total_disclosed_funding_usd)) : '<span class="muted">—</span>'}</div></div>
+      <div class="detail-field"><h4>Investors</h4><div>${escapeHtml(row.investors) || '<span class="muted">—</span>'}</div></div>
+      <div class="detail-field"><h4>Data completeness</h4><div>${row.data_completeness ?? '<span class="muted">—</span>'}${row.data_completeness !== null ? '%' : ''}</div></div>
+      <div class="detail-field full"><h4>Verified moat</h4><div>${escapeHtml(row.moat_summary) || '<span class="muted">Not yet verified</span>'}</div></div>
+      <div class="detail-field full"><h4>Why ranked</h4><div class="why-ranked-box">${escapeHtml(row.why_ranked) || '<span class="muted">Not yet computed</span>'}</div></div>
+      <div class="detail-field full"><h4>Sources</h4>${sourcesHtml}</div>
+    `;
+  }
+
+  // ---- Main render ----
+  function renderTable(){
+    const rows = getFilteredSortedRows();
+    renderCharts(rows);
+    const body = document.getElementById("table-body");
+
+    if(!loadedRegion[currentRegion]){
+      body.innerHTML = `<tr><td colspan="12" class="loading">Loading startups…</td></tr>`;
+      renderPagination(0, 1); updateTopScrollbar(); return;
+    }
+
+    if((rowsByRegion[currentRegion] || []).length === 0){
+      body.innerHTML = `<tr><td colspan="12" class="region-empty">
+        No qualified ${escapeHtml(REGION_LABELS[currentRegion])} companies yet. Either the ranking
+        pipeline hasn't completed a run for this region, or fewer than the minimum-confidence
+        threshold of candidates currently qualify — StartupRadar never fills a list with
+        unverified entries. Check back after the next scheduled refresh.</td></tr>`;
+      renderPagination(0, 1); updateTopScrollbar(); return;
+    }
+
+    if(rows.length === 0){
+      body.innerHTML = `<tr><td colspan="12" class="empty">No startups match these filters.</td></tr>`;
+      renderPagination(0, 1); updateTopScrollbar(); return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if(currentPage > totalPages) currentPage = totalPages;
+    const pageStart = (currentPage-1)*PAGE_SIZE;
+    const pageRows = rows.slice(pageStart, pageStart+PAGE_SIZE);
+    renderPagination(rows.length, totalPages);
+
+    body.innerHTML = "";
+    pageRows.forEach(r => {
+      const tr = document.createElement("tr");
+      tr.className = "data-row";
+      tr.tabIndex = 0;
+      tr.setAttribute("role", "button");
+      tr.setAttribute("aria-expanded", expandedCompanyId === r.id ? "true" : "false");
+      tr.setAttribute("aria-label", `${r.canonical_name}, rank ${r.regional_rank}. Press Enter to view details.`);
+      const homepageAttrs = safeAttrsOrHide(r.homepage);
+      const homepageLink = homepageAttrs ? `<a class="ext-link" ${homepageAttrs} title="Verified homepage (confidence ${r.homepage_confidence ?? '—'})" onclick="event.stopPropagation()">↗</a>` : "";
+      tr.innerHTML = `
+        <td class="rank-cell" data-label="Rank">${r.regional_rank}${renderRankChange(r.rank_change_since_previous_snapshot)}</td>
+        <td data-label="Company"><span class="expand-caret">▶</span><span class="company">${escapeHtml(r.canonical_name)}</span>${homepageLink}</td>
+        <td data-label="Headquarters">${escapeHtml(r.headquarters_country) || '<span class="muted">Unverified</span>'}</td>
+        <td data-label="Founded">${escapeHtml(r.founded_year) || '<span class="muted">—</span>'}</td>
+        <td data-label="Industry">${escapeHtml(r.industry) || '<span class="muted">—</span>'}</td>
+        <td data-label="What they do">${escapeHtml(r.description) || '<span class="muted">—</span>'}</td>
+        <td data-label="Stage">${escapeHtml(r.latest_funding_stage) || '<span class="muted">—</span>'}</td>
+        <td data-label="Latest Amount">${r.latest_funding_amount_usd ? escapeHtml(fmtUsd(r.latest_funding_amount_usd)) : '<span class="muted">—</span>'}</td>
+        <td data-label="Momentum">${renderMomentum(r.momentum_score)}</td>
+        <td data-label="Confidence">${renderConfidence(r.data_confidence)}</td>
+        <td data-label="Hiring">${escapeHtml((r.hiring_status||"unknown").replace(/_/g," ")) }</td>
+        <td data-label="Last Verified">${fmtDate(r.last_verified) || '<span class="muted">—</span>'}${renderStaleFlag(r.last_verified)}</td>
+      `;
+      tr.addEventListener("click", () => toggleDetailRow(r, tr));
+      tr.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleDetailRow(r, tr); } });
+      body.appendChild(tr);
+    });
+
+    updateTopScrollbar();
+  }
+
+  function resetPageAndRender(){ currentPage = 1; renderTable(); }
+
+  document.getElementById("search").addEventListener("input", resetPageAndRender);
+  ["filter-industry","filter-stage","filter-hiring","filter-momentum-tier","filter-confidence-tier","filter-investor","filter-founded"]
+    .forEach(id => document.getElementById(id).addEventListener("change", resetPageAndRender));
+  document.getElementById("download-csv").addEventListener("click", downloadCSV);
+  document.querySelectorAll(".col-filter").forEach(input => {
+    input.addEventListener("input", () => {
+      const key = input.dataset.filterKey;
+      const val = input.value.trim().toLowerCase();
+      if(val) columnFilters[key] = val; else delete columnFilters[key];
+      currentPage = 1; renderTable();
+    });
+    input.addEventListener("click", e => e.stopPropagation());
+  });
+  document.querySelectorAll("thead th[data-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if(sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+      currentPage = 1; renderTable();
+    });
+  });
+
+  // ---- News + scan status (unchanged data source) ----
+  function timeAgo(dateStr){
+    if(!dateStr) return "";
+    const ms = Date.now() - new Date(dateStr).getTime();
+    if(isNaN(ms)) return "";
+    const mins = Math.floor(ms/60000);
+    if(mins < 60) return `${Math.max(mins,0)}m ago`;
+    const hours = Math.floor(mins/60);
+    if(hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours/24)}d ago`;
+  }
+
+  async function loadNews(){
+    const list = document.getElementById("news-list");
+    const { data, error } = await client
+      .from("news_feed").select("*")
+      .order("published", {ascending:false, nullsFirst:false})
+      .order("fetched_at", {ascending:false}).limit(20);
+    if(error){ list.innerHTML = `<div class="empty">Couldn't load news.</div>`; return; }
+    const items = data || [];
+    if(items.length === 0){ list.innerHTML = `<div class="empty">No news yet.</div>`; return; }
+    list.innerHTML = items.map(n => {
+      const attrs = safeAttrsOrHide(n.link);
+      const inner = `<div class="news-title">${escapeHtml(n.title)}</div>
+        <div class="news-meta">${escapeHtml(n.source_name || '')}${n.published ? ' · ' + timeAgo(n.published) : ''}</div>`;
+      return attrs ? `<a class="news-item" ${attrs}>${inner}</a>` : `<div class="news-item">${inner}</div>`;
+    }).join("");
+  }
+
+  const STALE_AFTER_DAYS = 4; // main ranking refreshes 3x/week -- 4 days without a run is overdue
+  async function loadScanStatus(){
+    const label = document.getElementById("last-updated");
+    const dot = document.getElementById("status-dot");
+    const { data, error } = await client
+      .from("scan_runs").select("finished_at,run_status")
+      .eq("run_status", "success")
+      .order("finished_at", {ascending:false}).limit(1);
+    if(error || !data || data.length === 0){ label.textContent = "No v2 scans yet"; return; }
+    const run = data[0];
+    const days = daysSince(run.finished_at);
+    label.textContent = `Last scan: ${fmtDate(run.finished_at)}`;
+    if(days !== null && days > STALE_AFTER_DAYS){
+      dot.classList.add("dot-stale");
+      label.textContent += " — data may be stale";
+    }
+  }
+
+  // ---- Init ----
+  setupTopScrollbar();
+  switchRegion("US");
+  REGIONS.filter(r => r !== "US").forEach(loadRegion); // warm the other tabs in the background
+  loadNews();
+  loadScanStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "scraper/**"
+      - ".github/workflows/tests.yml"
+  pull_request:
+    paths:
+      - "scraper/**"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scraper/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: scraper
+        run: python -m pytest tests/ -v
+
+      - name: Write run summary
+        if: always()
+        run: echo "### Test run — $(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"

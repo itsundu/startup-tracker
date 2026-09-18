@@ -1,3 +1,10 @@
+> **Superseded by `RANKING_METHODOLOGY.md` (v2).** This document is kept as a historical record of
+> the v1 formula that shipped first and is still what `scraper/main.py` (the workflow currently on
+> the scheduled `ranking_refresh.yml` cron) computes. See `RANKING_METHODOLOGY.md` for the v2
+> company-plus-events model, regional independence, recency decay, stage-adjusted funding, source
+> tiers, and confidence/completeness split — implemented in `scraper/main_v2.py`, not yet wired
+> into the scheduled workflow (see `MIGRATION.md`).
+
 # Momentum Score Spec (v1)
 
 Implemented in `scraper/scoring.py`. Replaces the earlier 1-5 `signal_score` heuristic with a

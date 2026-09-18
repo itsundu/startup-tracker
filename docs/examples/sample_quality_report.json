@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-02-21T06:00:00+00:00",
+  "score_version": "v2",
+  "run_status": "success",
+  "qualified_company_count_by_region": {
+    "US": 38,
+    "INDIA": 24,
+    "ROW": 19
+  },
+  "shortfall_by_region": {
+    "US": 12,
+    "INDIA": 26,
+    "ROW": 31
+  },
+  "rejected_candidate_count_by_reason": {
+    "no qualifying event within the 180-day candidate window": 41,
+    "data confidence 52 below minimum ranking confidence 60": 19,
+    "headquarters region is not verified as US/INDIA/ROW": 12,
+    "primary domain is not verified": 7,
+    "evidence relies solely on a weak (Tier 3) discovery source with no corroboration": 5
+  },
+  "missingness_by_field": {
+    "founders": 34.0,
+    "employee_count_min": 61.0,
+    "moat_summary": 100.0,
+    "headquarters_city": 22.0
+  },
+  "source_tier_distribution": {
+    "1": 14,
+    "2": 156,
+    "3": 203
+  },
+  "invalid_homepage_count": 0,
+  "ambiguous_funding_count": 3,
+  "valuation_shown_as_funding_count": 0,
+  "stale_record_count": 2,
+  "duplicate_candidates_detected": 6,
+  "confidence_distribution": {
+    "0-19": 0,
+    "20-39": 0,
+    "40-59": 5,
+    "60-79": 21,
+    "80-100": 14
+  },
+  "pct_ranked_with_confidence_ge_70": 62.5,
+  "pct_ranked_with_two_sources_or_authoritative": 68.3,
+  "pct_ranked_with_verified_headquarters": 100.0,
+  "pct_ranked_with_verified_funding_dates": 71.6,
+  "pct_ranked_with_verified_employee_ranges": 39.0,
+  "pct_ranked_with_verified_hiring_data": 54.2,
+  "pct_ranked_with_recent_verified_event": 100.0,
+  "pct_ranked_with_verified_regional_assignment": 100.0,
+  "pct_ranked_with_valid_primary_domain": 100.0,
+  "pct_material_funding_claims_with_evidence": 100.0,
+  "llm_extraction_failure_rate": 1.8,
+  "provider_fallback_usage": {
+    "gemini": 214,
+    "groq": 9
+  },
+  "passed_launch_thresholds": false,
+  "threshold_failures": [
+    "only 62.5% of ranked records have confidence >= 70 (required 80.0%)"
+  ]
+}

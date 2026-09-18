@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from news_relevance import filter_relevant
 from sources import fetch_all_articles
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -72,8 +73,11 @@ def main():
 
     print("Fetching latest news...")
     articles = fetch_all_articles()
-    articles.sort(key=lambda a: a.get("published_iso") or "", reverse=True)
-    top = articles[:MAX_ITEMS]
+    relevant = filter_relevant(articles)
+    print(f"Filtered {len(articles) - len(relevant)} irrelevant item(s) (promotions/webinars/pure-macro) "
+          f"out of {len(articles)} fetched.")
+    relevant.sort(key=lambda a: a.get("published_iso") or "", reverse=True)
+    top = relevant[:MAX_ITEMS]
 
     written = upsert_news(top)
     print(f"Upserted {written} news items.")

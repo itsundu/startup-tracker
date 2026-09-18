@@ -1,3 +1,11 @@
+> **Status update:** the "Phase 2" items below around entity resolution, score decay, and a richer
+> data model have been implemented as **v2** (`scraper/main_v2.py`, on the `claude/startup-radar-v2`
+> branch as of this writing) — see `RANKING_METHODOLOGY.md` for the model and `MIGRATION.md` for
+> how it coexists with the "Current architecture" described below during the transition. This
+> document's description of the free-tier constraint and what's deliberately out of scope
+> (licensed data providers, a hosted backend, auth/subscriptions) still holds for v2 — it's a
+> richer pipeline within the same zero-paid-infrastructure constraint, not a departure from it.
+
 # StartupRadar — Architecture (free-tier scope)
 
 This document exists because a much larger product spec was proposed for this project — one

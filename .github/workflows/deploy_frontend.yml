@@ -7,9 +7,17 @@ on:
       - "frontend/**"
   workflow_dispatch: {}   # lets you trigger a redeploy manually from the Actions tab
 
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+permissions:
+  contents: read   # only checks out the repo and pushes files over SFTP; never writes back to git
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
