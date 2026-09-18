@@ -145,6 +145,12 @@
   }
   .controls input{flex:1;min-width:220px;}
   .controls input:focus, .controls select:focus{border-color:var(--amber);}
+  .btn{
+    background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);
+    font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;
+    padding:9px 14px;border-radius:var(--radius-sm);cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--amber);color:var(--amber);}
 
   /* Distribution charts */
   .charts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px;}
@@ -168,11 +174,22 @@
   .chart-empty{padding:16px 4px;text-align:center;font-size:12px;color:var(--ink-dim);}
 
   /* Two-column layout: table + news sidebar */
-  .layout{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;}
+  .layout{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;margin-bottom:24px;}
   .main-col{min-width:0;}
 
   /* Table */
-  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;overflow-x:auto;background:var(--bg-panel);box-shadow:var(--shadow);}
+  .table-outer{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg-panel);box-shadow:var(--shadow);}
+  .pagination-top{border-top:none;border-bottom:1px solid var(--line);}
+  .scrollbar-top{padding:10px 16px;border-bottom:1px solid var(--line);}
+  .scrollbar-track{position:relative;height:8px;background:var(--bg-alt);border-radius:999px;cursor:pointer;}
+  .scrollbar-thumb{
+    position:absolute;top:0;left:0;height:100%;min-width:30px;
+    background:var(--ink-dim);border-radius:999px;cursor:grab;
+    transition:background .15s;
+  }
+  .scrollbar-thumb:hover, .scrollbar-thumb.dragging{background:var(--amber);}
+  .scrollbar-thumb.dragging{cursor:grabbing;}
+  .table-scroll{overflow-x:auto;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   thead th{
     text-align:left;
@@ -188,6 +205,19 @@
     white-space:nowrap;
   }
   thead th:hover{color:var(--amber);}
+  .filter-row th{
+    cursor:default;text-transform:none;letter-spacing:normal;font-weight:400;
+    padding:8px 10px;background:var(--bg-panel);border-bottom:1px solid var(--line);
+  }
+  .filter-row th:hover{color:inherit;}
+  .col-filter{
+    width:100%;min-width:70px;box-sizing:border-box;
+    background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    padding:5px 8px;border-radius:6px;outline:none;
+  }
+  .col-filter:focus{border-color:var(--amber);}
+  .col-filter::placeholder{color:var(--ink-dim);}
   tbody td{
     padding:12px 16px;
     border-bottom:1px solid var(--line);
@@ -323,6 +353,7 @@
         <select id="filter-investor"><option value="">All investors</option></select>
         <select id="filter-founded"><option value="">Founded: any year</option></select>
         <select id="filter-hiring"><option value="">Hiring: any</option></select>
+        <button type="button" id="download-csv" class="btn">⬇ Download CSV</button>
       </div>
 
       <section class="charts-grid" id="charts-grid">
@@ -344,34 +375,6 @@
         </div>
       </section>
 
-      <main class="table-outer">
-        <table id="startup-table">
-          <thead>
-            <tr>
-              <th data-key="company_name">Company</th>
-              <th data-key="region">Region</th>
-              <th data-key="location">Location</th>
-              <th data-key="year_founded">Founded</th>
-              <th data-key="founder_name">Founder</th>
-              <th data-key="industry">Industry</th>
-              <th data-key="business_idea">What they do</th>
-              <th data-key="unique_moat">Moat</th>
-              <th data-key="funding_stage">Stage</th>
-              <th data-key="funding_amount">Amount</th>
-              <th data-key="momentum_score">Momentum</th>
-              <th data-key="investors">Investors</th>
-              <th data-key="contact_email">Contact</th>
-              <th data-key="hiring_status">Hiring</th>
-              <th data-key="source_name">Source</th>
-            </tr>
-          </thead>
-          <tbody id="table-body">
-            <tr><td colspan="15" class="loading">Loading startups…</td></tr>
-          </tbody>
-        </table>
-        <div class="pagination" id="pagination"></div>
-      </main>
-
     </div>
 
     <aside class="sidebar">
@@ -382,6 +385,59 @@
       </div>
     </aside>
   </div>
+
+  <main class="table-outer">
+    <div class="pagination pagination-top" id="pagination-top"></div>
+    <div class="scrollbar-top" id="scrollbar-top">
+      <div class="scrollbar-track" id="scrollbar-track">
+        <div class="scrollbar-thumb" id="scrollbar-thumb"></div>
+      </div>
+    </div>
+    <div class="table-scroll" id="table-scroll">
+    <table id="startup-table">
+      <thead>
+        <tr>
+          <th data-key="company_name">Company</th>
+          <th data-key="region">Region</th>
+          <th data-key="location">Location</th>
+          <th data-key="year_founded">Founded</th>
+          <th data-key="founder_name">Founder</th>
+          <th data-key="industry">Industry</th>
+          <th data-key="business_idea">What they do</th>
+          <th data-key="unique_moat">Moat</th>
+          <th data-key="funding_stage">Stage</th>
+          <th data-key="funding_amount">Amount</th>
+          <th data-key="momentum_score">Momentum</th>
+          <th data-key="investors">Investors</th>
+          <th data-key="contact_email">Contact</th>
+          <th data-key="hiring_status">Hiring</th>
+          <th data-key="source_name">Source</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input type="text" class="col-filter" data-filter-key="company_name" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="region" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="location" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="year_founded" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="founder_name" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="industry" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="business_idea" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="unique_moat" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="funding_stage" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="funding_amount" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="momentum_score" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="investors" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="contact_email" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="hiring_status" placeholder="Filter…"></th>
+          <th><input type="text" class="col-filter" data-filter-key="source_name" placeholder="Filter…"></th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr><td colspan="15" class="loading">Loading startups…</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </main>
 
   <footer class="site-footer">
     <div>Startup Radar is a subsidiary of <a href="https://terralytixai.com" target="_blank" rel="noopener">TERRALYTIX</a></div>
@@ -423,6 +479,25 @@
   let sortDir = -1;
   let currentPage = 1;
   const PAGE_SIZE = 20;
+  let columnFilters = {};
+
+  const EXPORT_COLUMNS = [
+    ["company_name", "Company"],
+    ["region", "Region"],
+    ["location", "Location"],
+    ["year_founded", "Founded"],
+    ["founder_name", "Founder"],
+    ["industry", "Industry"],
+    ["business_idea", "What they do"],
+    ["unique_moat", "Moat"],
+    ["funding_stage", "Stage"],
+    ["funding_amount", "Amount"],
+    ["momentum_score", "Momentum"],
+    ["investors", "Investors"],
+    ["contact_email", "Contact"],
+    ["hiring_status", "Hiring"],
+    ["source_name", "Source"],
+  ];
 
   function fmtDate(d){
     if(!d) return "";
@@ -586,26 +661,31 @@
     renderBarChart("chart-momentum", computeMomentumDistribution(rows), momentumColor);
   }
 
-  // ---- Pagination ----
+  // ---- Pagination (rendered both above and below the table) ----
   function renderPagination(totalItems, totalPages){
-    const el = document.getElementById("pagination");
-    if(totalItems === 0){ el.innerHTML = ""; return; }
+    const topEl = document.getElementById("pagination-top");
+    const bottomEl = document.getElementById("pagination");
+    if(totalItems === 0){ topEl.innerHTML = ""; bottomEl.innerHTML = ""; return; }
     const start = (currentPage - 1) * PAGE_SIZE + 1;
     const end = Math.min(currentPage * PAGE_SIZE, totalItems);
-    el.innerHTML = `
+    const html = `
       <span class="page-info">Showing ${start}–${end} of ${totalItems}</span>
       <div class="page-controls">
-        <button class="page-btn" id="page-prev" ${currentPage <= 1 ? 'disabled' : ''}>‹ Prev</button>
+        <button class="page-btn page-prev" ${currentPage <= 1 ? 'disabled' : ''}>‹ Prev</button>
         <span class="page-current mono">Page ${currentPage} of ${totalPages}</span>
-        <button class="page-btn" id="page-next" ${currentPage >= totalPages ? 'disabled' : ''}>Next ›</button>
+        <button class="page-btn page-next" ${currentPage >= totalPages ? 'disabled' : ''}>Next ›</button>
       </div>`;
-    const prevBtn = document.getElementById("page-prev");
-    const nextBtn = document.getElementById("page-next");
-    if(prevBtn) prevBtn.addEventListener("click", ()=>{
-      if(currentPage > 1){ currentPage--; renderTable(); scrollToTableTop(); }
+    topEl.innerHTML = html;
+    bottomEl.innerHTML = html;
+    document.querySelectorAll(".page-prev").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        if(currentPage > 1){ currentPage--; renderTable(); scrollToTableTop(); }
+      });
     });
-    if(nextBtn) nextBtn.addEventListener("click", ()=>{
-      if(currentPage < totalPages){ currentPage++; renderTable(); scrollToTableTop(); }
+    document.querySelectorAll(".page-next").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        if(currentPage < totalPages){ currentPage++; renderTable(); scrollToTableTop(); }
+      });
     });
   }
 
@@ -614,7 +694,112 @@
     if(outer) outer.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function renderTable(){
+  // ---- Top scrollbar: a custom, always-visible drag handle synced to the
+  // table's real horizontal scroll. A plain `overflow-x:auto` strip was tried
+  // first, but its native scrollbar renders as an invisible macOS/Chromium
+  // overlay until actively scrolled -- useless as a visible top control. This
+  // draws its own track+thumb instead, so it's visible and usable everywhere.
+  let draggingThumb = false;
+  let dragStartX = 0;
+  let dragStartScrollLeft = 0;
+
+  function updateTopScrollbar(){
+    const tableScroll = document.getElementById("table-scroll");
+    const wrapper = document.getElementById("scrollbar-top");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    if(!tableScroll || !wrapper || !track || !thumb) return;
+
+    const scrollWidth = tableScroll.scrollWidth;
+    const clientWidth = tableScroll.clientWidth;
+    const maxScroll = scrollWidth - clientWidth;
+
+    if(maxScroll <= 1){
+      wrapper.style.display = "none";
+      return;
+    }
+    wrapper.style.display = "block";
+
+    const trackWidth = track.clientWidth;
+    const thumbWidth = Math.max(30, (clientWidth / scrollWidth) * trackWidth);
+    const maxThumbLeft = trackWidth - thumbWidth;
+    const thumbLeft = maxThumbLeft > 0 ? (tableScroll.scrollLeft / maxScroll) * maxThumbLeft : 0;
+
+    thumb.style.width = thumbWidth + "px";
+    thumb.style.left = thumbLeft + "px";
+  }
+
+  function scrollTableFromThumbLeft(thumbLeft){
+    const tableScroll = document.getElementById("table-scroll");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    const trackWidth = track.clientWidth;
+    const thumbWidth = thumb.getBoundingClientRect().width;
+    const maxThumbLeft = trackWidth - thumbWidth;
+    const maxScroll = tableScroll.scrollWidth - tableScroll.clientWidth;
+    const clamped = Math.max(0, Math.min(maxThumbLeft, thumbLeft));
+    tableScroll.scrollLeft = maxThumbLeft > 0 ? (clamped / maxThumbLeft) * maxScroll : 0;
+  }
+
+  function setupTopScrollbar(){
+    const tableScroll = document.getElementById("table-scroll");
+    const track = document.getElementById("scrollbar-track");
+    const thumb = document.getElementById("scrollbar-thumb");
+    if(!tableScroll || !track || !thumb) return;
+
+    tableScroll.addEventListener("scroll", updateTopScrollbar);
+    window.addEventListener("resize", updateTopScrollbar);
+
+    function startDrag(clientX){
+      draggingThumb = true;
+      dragStartX = clientX;
+      dragStartScrollLeft = tableScroll.scrollLeft;
+      thumb.classList.add("dragging");
+    }
+    function dragTo(clientX){
+      if(!draggingThumb) return;
+      const trackWidth = track.clientWidth;
+      const thumbWidth = thumb.getBoundingClientRect().width;
+      const maxThumbLeft = trackWidth - thumbWidth;
+      const maxScroll = tableScroll.scrollWidth - tableScroll.clientWidth;
+      const deltaX = clientX - dragStartX;
+      const deltaScroll = maxThumbLeft > 0 ? (deltaX / maxThumbLeft) * maxScroll : 0;
+      tableScroll.scrollLeft = Math.max(0, Math.min(maxScroll, dragStartScrollLeft + deltaScroll));
+    }
+    function endDrag(){
+      if(!draggingThumb) return;
+      draggingThumb = false;
+      thumb.classList.remove("dragging");
+      document.body.style.userSelect = "";
+    }
+
+    thumb.addEventListener("mousedown", e=>{
+      startDrag(e.clientX);
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", e => dragTo(e.clientX));
+    window.addEventListener("mouseup", endDrag);
+
+    thumb.addEventListener("touchstart", e=>{
+      startDrag(e.touches[0].clientX);
+    }, { passive: true });
+    window.addEventListener("touchmove", e=>{
+      if(draggingThumb) dragTo(e.touches[0].clientX);
+    }, { passive: true });
+    window.addEventListener("touchend", endDrag);
+
+    track.addEventListener("click", e=>{
+      if(e.target === thumb) return;
+      const rect = track.getBoundingClientRect();
+      const thumbWidth = thumb.getBoundingClientRect().width;
+      scrollTableFromThumbLeft((e.clientX - rect.left) - thumbWidth / 2);
+    });
+
+    updateTopScrollbar();
+  }
+
+  function getFilteredSortedRows(){
     const q = document.getElementById("search").value.toLowerCase();
     const region = document.getElementById("filter-region").value;
     const industry = document.getElementById("filter-industry").value;
@@ -634,6 +819,11 @@
         const hay = [r.company_name, r.business_idea, r.unique_moat, r.investors, r.location, r.founder_name].join(" ").toLowerCase();
         if(!hay.includes(q)) return false;
       }
+      for(const [key, val] of Object.entries(columnFilters)){
+        const cell = r[key];
+        if(cell === null || cell === undefined) return false;
+        if(!String(cell).toLowerCase().includes(val)) return false;
+      }
       return true;
     });
 
@@ -649,12 +839,42 @@
       return av.localeCompare(bv) * sortDir;
     });
 
+    return rows;
+  }
+
+  function csvEscape(val){
+    if(val === null || val === undefined) return "";
+    const s = String(val);
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadCSV(){
+    const rows = getFilteredSortedRows();
+    const header = EXPORT_COLUMNS.map(([,label]) => csvEscape(label)).join(",");
+    const lines = rows.map(r => EXPORT_COLUMNS.map(([key]) => csvEscape(r[key])).join(","));
+    const csv = "﻿" + [header, ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `startup-radar-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function renderTable(){
+    const rows = getFilteredSortedRows();
     renderCharts(rows);
 
     const body = document.getElementById("table-body");
     if(rows.length === 0){
       body.innerHTML = `<tr><td colspan="15" class="empty">No startups match these filters yet.</td></tr>`;
       renderPagination(0, 1);
+      updateTopScrollbar();
       return;
     }
 
@@ -683,6 +903,8 @@
         <td data-label="Source">${r.source_url ? `<a class="src" href="${r.source_url}" target="_blank" rel="noopener">${escapeHtml(r.source_name || 'link')}</a>` : '<span class="muted">—</span>'}</td>
       </tr>
     `).join("");
+
+    updateTopScrollbar();
   }
 
   async function load(){
@@ -772,7 +994,18 @@
   document.getElementById("filter-investor").addEventListener("change", resetPageAndRender);
   document.getElementById("filter-founded").addEventListener("change", resetPageAndRender);
   document.getElementById("filter-hiring").addEventListener("change", resetPageAndRender);
-  document.querySelectorAll("thead th").forEach(th=>{
+  document.getElementById("download-csv").addEventListener("click", downloadCSV);
+  document.querySelectorAll(".col-filter").forEach(input=>{
+    input.addEventListener("input", ()=>{
+      const key = input.dataset.filterKey;
+      const val = input.value.trim().toLowerCase();
+      if(val) columnFilters[key] = val; else delete columnFilters[key];
+      currentPage = 1;
+      renderTable();
+    });
+    input.addEventListener("click", e => e.stopPropagation());
+  });
+  document.querySelectorAll("thead th[data-key]").forEach(th=>{
     th.addEventListener("click", ()=>{
       const key = th.dataset.key;
       if(sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
@@ -781,6 +1014,7 @@
     });
   });
 
+  setupTopScrollbar();
   load();
   loadNews();
   loadScanStatus();
