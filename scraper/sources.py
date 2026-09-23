@@ -53,11 +53,18 @@ def _to_iso(published_parsed):
         return None
 
 
+RSS_FETCH_TIMEOUT = 15  # seconds -- feedparser.parse(url) has NO timeout of its own and can hang
+                        # far longer than this on a slow/unresponsive feed; fetch via requests
+                        # (which does enforce a timeout) and hand feedparser the bytes instead.
+
+
 def fetch_rss_sources():
     items = []
     for source_name, url in RSS_FEEDS:
         try:
-            feed = feedparser.parse(url)
+            resp = requests.get(url, headers=HEADERS, timeout=RSS_FETCH_TIMEOUT)
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
             for entry in feed.entries[:25]:
                 items.append({
                     "title": entry.get("title", ""),

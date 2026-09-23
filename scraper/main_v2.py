@@ -119,17 +119,35 @@ def _apply_field_updates(existing_row, new_values_with_meta, base_url, service_k
     return patch, any_material_change
 
 
+def _log_phase(label, phase_start, run_start):
+    elapsed_phase = (datetime.now(timezone.utc) - phase_start).total_seconds()
+    elapsed_total = (datetime.now(timezone.utc) - run_start).total_seconds()
+    print(f"[phase] {label}: {elapsed_phase:.1f}s (total elapsed {elapsed_total:.1f}s)")
+    return datetime.now(timezone.utc)
+
+
 def process_run(now=None):
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
 
     now = now or datetime.now(timezone.utc)
+    run_wall_start = datetime.now(timezone.utc)
     run_id = db.insert_scan_run(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
         "workflow_type": "ranking_refresh", "score_version": SCORE_VERSION, "run_status": "running",
     })
 
+    # Phase-elapsed logging below exists specifically so a run that hits the
+    # GitHub Actions job timeout (killed -> "cancelled", no exception, no
+    # stack trace) still leaves a trail in the log showing which phase it
+    # was in when it got cut off -- this is how the first-ever scheduled
+    # runs were diagnosed as stalling for the full 30-minute timeout with
+    # zero companies ever written (see git history / PR discussion).
+    t = datetime.now(timezone.utc)
     articles = fetch_all_articles()
+    t = _log_phase(f"fetch_all_articles ({len(articles)} articles)", t, run_wall_start)
+
     claims, batch_count, failed_batches, rejected_count = extract_startups_v2(articles)
+    t = _log_phase(f"extract_startups_v2 ({batch_count} batches, {failed_batches} failed, {len(claims)} claims)", t, run_wall_start)
 
     if batch_count > 0 and failed_batches == batch_count:
         db.update_scan_run(SUPABASE_URL, SUPABASE_SERVICE_KEY, run_id, {
@@ -145,10 +163,12 @@ def process_run(now=None):
 
     existing_companies = db.fetch_companies_for_resolution(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     existing_aliases = db.fetch_aliases(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    t = _log_phase(f"fetch existing companies/aliases ({len(existing_companies)} companies, {len(existing_aliases)} aliases)", t, run_wall_start)
 
     enriched_stub_records = [{"company_name": g["company_name"], "source_url": g["claims"][0].get("source_url")} for g in groups.values()]
     enriched = enrich_all(enriched_stub_records, articles)
     enrichment_by_name = {normalize_company_name(r["company_name"]): r for r in enriched}
+    t = _log_phase(f"enrich_all ({len(groups)} candidate companies)", t, run_wall_start)
 
     rejected_candidate_reasons = {}
     companies_accepted = 0
@@ -391,6 +411,8 @@ def process_run(now=None):
             "funding_amount_usd": latest_funding["amount_usd"] if latest_funding else None,
         })
 
+    t = _log_phase(f"per-company resolve+enrich+events loop ({len(groups)} companies processed)", t, run_wall_start)
+
     # ---- stage-adjusted funding: peer pass across this run's own candidate pool ----
     peers_by_stage_region = {}
     for c in ranking_candidates:
@@ -416,6 +438,7 @@ def process_run(now=None):
         by_region.setdefault(c["region_bucket"], []).append(c)
 
     ranked = rank_all_regions(by_region, top_n=50)
+    t = _log_phase("eligibility gate + regional ranking", t, run_wall_start)
 
     confidence_values = [c["data_confidence"] for c in ranking_candidates]
     qualified_by_region = {region: len(rows) for region, rows in ranked.items()}

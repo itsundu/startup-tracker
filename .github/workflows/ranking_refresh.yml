@@ -17,7 +17,13 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Every scheduled/manual run so far has hit this limit and been killed
+    # (GitHub Actions "cancelled", not "failure" -- no exception, no
+    # companies ever written) before finishing -- see the phase-elapsed
+    # logging added to main_v2.py to find out why. Raised from 30 to 55 as
+    # headroom while that's diagnosed; still well under GitHub's 6-hour
+    # default so a genuinely hung run doesn't burn Actions minutes forever.
+    timeout-minutes: 55
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
