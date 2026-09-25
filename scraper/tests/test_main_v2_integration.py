@@ -197,3 +197,103 @@ def test_process_run_downgrades_valuation_language_even_if_llm_mislabeled_it(mon
     # valuation number must NEVER land in amount_usd.
     assert event["event_type"] != "funding_round_completed"
     assert event["amount_usd"] is None
+
+
+def test_rest_of_world_location_is_not_dropped_to_unverified(monkeypatch):
+    """Regression test for a real bug found in production: the region_bucket
+    mapping dict omitted "Rest of World" as a key, so EVERY genuinely-ROW
+    company fell through to None (unverified) right alongside truly-unknown
+    locations -- meaning nothing could ever qualify for the ROW region. A
+    live run confirmed this: 0 ROW companies and regional-assignment
+    coverage far below what the underlying data actually supported.
+    """
+    fake_db = FakeDB()
+    monkeypatch.setattr(main_v2, "SUPABASE_URL", "https://fake.supabase.co")
+    monkeypatch.setattr(main_v2, "SUPABASE_SERVICE_KEY", "fake-service-key")
+    monkeypatch.setattr(main_v2, "db", fake_db)
+
+    row_claim = {
+        "company_name": "Delta Robotics", "business_idea": "Builds delivery drones.",
+        "industry": "AI", "location": "Berlin, Germany",
+        "event_type": "funding_round_completed", "value": "Series A, $5 million",
+        "investors": "EU Ventures",
+        "evidence_excerpt": "raised $5 million in a Series A round led by EU Ventures",
+        "source_index": 1, "confidence": 85, "status": "completed", "notes": None,
+        "source_url": "https://eu-startups.com/delta-raises", "source_name": "EU-Startups",
+        "published_at": "2026-02-19T00:00:00+00:00", "extraction_provider": "gemini",
+    }
+    monkeypatch.setattr(main_v2, "fetch_all_articles", lambda: [
+        {"title": "Delta Robotics raises $5M", "summary": "...", "link": "https://eu-startups.com/delta-raises",
+         "source_name": "EU-Startups", "published_iso": "2026-02-19T00:00:00+00:00"},
+    ])
+    monkeypatch.setattr(main_v2, "extract_startups_v2", lambda articles: ([row_claim], 1, 0, 0))
+    monkeypatch.setattr(main_v2, "enrich_all", lambda records, articles: [
+        {**r, "homepage": "https://deltarobotics.eu", "homepage_confidence": 90, "primary_domain": "deltarobotics.eu",
+         "hiring_status": "actively_hiring", "hiring_confidence": 80, "verified_open_role_count": 4}
+        for r in records
+    ])
+
+    main_v2.process_run(now=datetime(2026, 2, 21, tzinfo=timezone.utc))
+
+    delta = next(c for c in fake_db.companies.values() if c["canonical_name"] == "Delta Robotics")
+    assert delta["region_bucket"] == "ROW"
+
+
+def test_quality_report_percentages_measure_only_ranked_companies_not_full_pool(monkeypatch):
+    """Regression test for a real bug found in production: the quality
+    report's "pct_ranked_with_..." fields were computed over the FULL
+    candidate pool (including every company the eligibility gate correctly
+    rejected), not just the companies that actually made a regional list --
+    which meant a strict (working-as-intended) eligibility gate made the
+    launch thresholds nearly unpassable regardless of how good the survivors
+    were. Here, one candidate (Acme) is clearly eligible and one (Epsilon)
+    is deliberately not (no resolvable homepage, so primary_domain_verified
+    is False) -- the reported percentages must reflect ONLY Acme, not be
+    diluted by Epsilon.
+    """
+    fake_db = FakeDB()
+    monkeypatch.setattr(main_v2, "SUPABASE_URL", "https://fake.supabase.co")
+    monkeypatch.setattr(main_v2, "SUPABASE_SERVICE_KEY", "fake-service-key")
+    monkeypatch.setattr(main_v2, "db", fake_db)
+
+    weak_claim = {
+        "company_name": "Epsilon Vague", "business_idea": "Does something in tech.",
+        "industry": "AI", "location": None,
+        "event_type": "product_launch", "value": None, "investors": None,
+        "evidence_excerpt": "Epsilon Vague launched a new product.",
+        "source_index": 1, "confidence": 40, "status": "completed", "notes": None,
+        "source_url": "https://news.ycombinator.com/item?id=999", "source_name": "Hacker News",
+        "published_at": "2026-02-10T00:00:00+00:00", "extraction_provider": "gemini",
+    }
+
+    monkeypatch.setattr(main_v2, "fetch_all_articles", lambda: FAKE_ARTICLES + [
+        {"title": "Epsilon Vague launches", "summary": "...", "link": "https://news.ycombinator.com/item?id=999",
+         "source_name": "Hacker News", "published_iso": "2026-02-10T00:00:00+00:00"},
+    ])
+    monkeypatch.setattr(main_v2, "extract_startups_v2", lambda articles: (FAKE_CLAIMS + [weak_claim], 1, 0, 0))
+
+    def _enrich(records, articles):
+        out = []
+        for r in records:
+            if r["company_name"] == "Epsilon Vague":
+                out.append({**r, "homepage": None, "homepage_confidence": None, "primary_domain": None,
+                            "hiring_status": "unknown", "hiring_confidence": 0, "verified_open_role_count": None})
+            else:
+                out.append(_fake_enrich_all([r], articles)[0])
+        return out
+
+    monkeypatch.setattr(main_v2, "enrich_all", _enrich)
+
+    report = main_v2.process_run(now=datetime(2026, 2, 21, tzinfo=timezone.utc))[0]
+
+    total_ranked = sum(report.qualified_company_count_by_region.values())
+    assert total_ranked == 2  # Acme + Beta ranked; Epsilon rejected (no verified domain)
+    assert "Epsilon Vague" not in {
+        c["canonical_name"] for c in fake_db.companies.values()
+        if c["canonical_name"] == "Epsilon Vague" and c.get("regional_rank")
+    }
+    # Both ranked companies have a verified region -- must read 100%, not
+    # diluted to 66.7% by the unranked Epsilon (which the OLD buggy
+    # denominator-over-all-candidates code would have produced).
+    assert report.pct_ranked_with_verified_regional_assignment == 100.0
+    assert report.pct_ranked_with_valid_primary_domain == 100.0

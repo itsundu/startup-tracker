@@ -190,7 +190,18 @@ def process_run(now=None):
 
         location_guess = next((c.get("location") for c in group["claims"] if c.get("location")), None)
         region_bucket = classify_region(location_guess)
-        region_bucket = {"USA": "US", "India": "INDIA", "India (Chennai)": "INDIA"}.get(region_bucket)  # else -> None (ROW/Unknown collapse to None: not verified)
+        # classify_region() returns "Unknown", "India", "India (Chennai)", "USA", or
+        # "Rest of World". Only "Unknown" (a real "we don't know" case) should collapse to
+        # None here -- "Rest of World" is itself a verified, meaningful classification and
+        # must map to the ROW bucket, not silently drop out. (A previous version of this
+        # dict omitted "Rest of World" as a key entirely, so EVERY genuinely-ROW company
+        # fell through .get()'s implicit None default alongside truly-unknown ones --
+        # nothing could ever qualify for the ROW region as a result. Confirmed by the first
+        # real run: 0 ROW companies, and regional-assignment coverage far below where the
+        # data should have supported.)
+        region_bucket = {
+            "USA": "US", "India": "INDIA", "India (Chennai)": "INDIA", "Rest of World": "ROW",
+        }.get(region_bucket)  # "Unknown" (or anything unrecognized) -> None: genuinely unverified
 
         industry = next((c.get("industry") for c in group["claims"] if c.get("industry")), None)
         founded_year = next((c.get("value") for c in group["claims"] if c.get("event_type") == "other" and "found" in (c.get("evidence_excerpt") or "").lower()), None)
@@ -440,7 +451,20 @@ def process_run(now=None):
     ranked = rank_all_regions(by_region, top_n=50)
     t = _log_phase("eligibility gate + regional ranking", t, run_wall_start)
 
-    confidence_values = [c["data_confidence"] for c in ranking_candidates]
+    # The launch-quality percentages below ("pct_ranked_with_...") must be
+    # measured over the companies that actually MADE the ranked list, not
+    # the full incoming candidate pool. `ranking_candidates` includes every
+    # extracted company BEFORE the eligibility gate -- most of which the
+    # gate is deliberately, correctly rejecting (that's its job). Computing
+    # these percentages against that pre-filter population meant the launch
+    # thresholds were nearly unpassable regardless of how good the survivors
+    # were: a strict gate naturally has a low candidate-pool hit rate even
+    # on a healthy run. `rank_region` returns each surviving company as a
+    # copy of its `ranking_candidates` entry plus the new ranking fields, so
+    # `ranked_flat` still carries every field used below.
+    ranked_flat = [c for rows in ranked.values() for c in rows]
+
+    confidence_values = [c["data_confidence"] for c in ranked_flat]
     qualified_by_region = {region: len(rows) for region, rows in ranked.items()}
 
     report = build_quality_report(
@@ -456,14 +480,14 @@ def process_run(now=None):
         stale_record_count=sum(1 for c in ranking_candidates if is_stale_excluded(c["eligibility_input"]["days_since_last_verified"])),
         duplicate_candidates_detected=0,
         confidence_values=confidence_values,
-        pct_ranked_with_two_sources_or_authoritative=round(100 * sum(1 for c in ranking_candidates if c["independent_source_count"] >= 2 or c["eligibility_input"]["best_source_tier"] == 1) / max(1, len(ranking_candidates)), 1),
-        pct_ranked_with_verified_headquarters=round(100 * sum(1 for c in ranking_candidates if c["region_bucket"]) / max(1, len(ranking_candidates)), 1),
-        pct_ranked_with_verified_funding_dates=round(100 * sum(1 for c in ranking_candidates if c["funding_amount_usd"]) / max(1, len(ranking_candidates)), 1),
+        pct_ranked_with_two_sources_or_authoritative=round(100 * sum(1 for c in ranked_flat if c["independent_source_count"] >= 2 or c["eligibility_input"]["best_source_tier"] == 1) / max(1, len(ranked_flat)), 1),
+        pct_ranked_with_verified_headquarters=round(100 * sum(1 for c in ranked_flat if c["region_bucket"]) / max(1, len(ranked_flat)), 1),
+        pct_ranked_with_verified_funding_dates=round(100 * sum(1 for c in ranked_flat if c["funding_amount_usd"]) / max(1, len(ranked_flat)), 1),
         pct_ranked_with_verified_employee_ranges=0.0,
-        pct_ranked_with_verified_hiring_data=round(100 * sum(1 for c in ranking_candidates if c["component_scores"]["hiring_momentum"] > 0) / max(1, len(ranking_candidates)), 1),
-        pct_ranked_with_recent_verified_event=round(100 * sum(1 for c in ranking_candidates if c["component_scores"]["recent_verified_events"] > 0) / max(1, len(ranking_candidates)), 1),
-        pct_ranked_with_verified_regional_assignment=round(100 * sum(1 for c in ranking_candidates if c["region_bucket"]) / max(1, len(ranking_candidates)), 1),
-        pct_ranked_with_valid_primary_domain=round(100 * sum(1 for c in ranking_candidates if c["eligibility_input"]["primary_domain_verified"]) / max(1, len(ranking_candidates)), 1),
+        pct_ranked_with_verified_hiring_data=round(100 * sum(1 for c in ranked_flat if c["component_scores"]["hiring_momentum"] > 0) / max(1, len(ranked_flat)), 1),
+        pct_ranked_with_recent_verified_event=round(100 * sum(1 for c in ranked_flat if c["component_scores"]["recent_verified_events"] > 0) / max(1, len(ranked_flat)), 1),
+        pct_ranked_with_verified_regional_assignment=round(100 * sum(1 for c in ranked_flat if c["region_bucket"]) / max(1, len(ranked_flat)), 1),
+        pct_ranked_with_valid_primary_domain=round(100 * sum(1 for c in ranked_flat if c["eligibility_input"]["primary_domain_verified"]) / max(1, len(ranked_flat)), 1),
         pct_material_funding_claims_with_evidence=100.0,  # llm_contract rejects material claims without evidence before they ever reach here
         llm_extraction_failure_rate=round(100 * failed_batches / max(1, batch_count), 1),
         provider_fallback_usage={},
