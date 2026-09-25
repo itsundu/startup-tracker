@@ -297,3 +297,16 @@ def test_quality_report_percentages_measure_only_ranked_companies_not_full_pool(
     # denominator-over-all-candidates code would have produced).
     assert report.pct_ranked_with_verified_regional_assignment == 100.0
     assert report.pct_ranked_with_valid_primary_domain == 100.0
+
+    # data_confidence must be persisted for EVERY processed company --
+    # ranked or not -- regardless of whether should_publish ended up True or
+    # False. Confirmed as a real bug in production: it was only ever
+    # written inside the should_publish-gated ranking-patch block, so a run
+    # that correctly declined to publish left every company's confidence at
+    # its default 0, including ones (like Acme here) that individually
+    # cleared the eligibility bar comfortably.
+    for name in ("Acme Robotics", "Beta Fintech", "Epsilon Vague"):
+        company = next(c for c in fake_db.companies.values() if c["canonical_name"] == name)
+        assert company["data_confidence"] is not None
+    epsilon = next(c for c in fake_db.companies.values() if c["canonical_name"] == "Epsilon Vague")
+    assert epsilon["data_confidence"] > 0  # weak, but a real computed value, not the unset default

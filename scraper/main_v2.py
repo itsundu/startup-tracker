@@ -386,6 +386,23 @@ def process_run(now=None):
             extraction_confidence=(sum(c.get("confidence", 0) for c in group["claims"]) / len(group["claims"])) if group["claims"] else None,
         )
 
+        # Persist confidence/completeness for EVERY processed company right
+        # away -- these are per-company field-verification outcomes, not a
+        # ranking decision, so they must not be gated behind should_publish
+        # (see the final ranking-patch block below, which only touches
+        # regional_rank/momentum_score/why_ranked). Confirmed as a real gap
+        # in production: on a run that doesn't publish, every company's
+        # in-memory data_confidence was computed correctly but never
+        # written, leaving the column at its default 0 -- which also
+        # silently breaks upsert_rules' preservation logic on the NEXT run,
+        # since it reads existing_confidence back from this same column.
+        company_record["data_confidence"] = data_confidence
+        company_record["data_completeness"] = field_completeness
+        db.patch_company(SUPABASE_URL, SUPABASE_SERVICE_KEY, company_id, {
+            "data_confidence": data_confidence,
+            "data_completeness": field_completeness,
+        })
+
         component_scores = {
             "recent_verified_events": score_recent_verified_events(events_for_scoring, now=now),
             "traction": score_traction(events_for_scoring, now=now),
